@@ -1,0 +1,14 @@
+# Railway — https://railway.app
+# Deploy: New Project → Deploy from GitHub (or CLI)
+# Add PostgreSQL plugin, then set Telegram env vars
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python __main__.py"
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 5

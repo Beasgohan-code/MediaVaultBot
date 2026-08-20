@@ -1,0 +1,42 @@
+# Render Blueprint — https://render.com
+# Dashboard: New → Blueprint → connect this repo
+
+services:
+  - type: web
+    name: mediavault-bot
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: starter
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: mediavault-db
+          property: connectionString
+      - key: API_ID
+        sync: false
+      - key: API_HASH
+        sync: false
+      - key: BOT_TOKEN
+        sync: false
+      - key: OWNER_ID
+        sync: false
+      - key: BOT_USERNAME
+        sync: false
+      - key: YTDLP_ENABLED
+        value: "true"
+      - key: REQUIRE_TOS_ACCEPT
+        value: "true"
+      - key: HEALTH_PORT
+        value: "8080"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    # Optional secrets (set in dashboard):
+    # GOOGLE_SERVICE_ACCOUNT_FILE content via secret file, cookies, etc.
+
+databases:
+  - name: mediavault-db
+    plan: free
+    databaseName: mediavault
+    user: mediavault
