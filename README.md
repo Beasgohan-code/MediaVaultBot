@@ -2,7 +2,7 @@
 
 **Modern personal media bot — 2026 edition**
 
-- Your own **Google Drive** library (browse / search / send)
+- Your own **download history** library (browse / search / send)
 - Public platform downloads via **yt-dlp** (YouTube, Reddit, X, TikTok, Instagram public, Vimeo, SoundCloud, +1000 sites)
 - **PostgreSQL** + SQLAlchemy 2 async
 - **Kurigram** (latest Telegram MTProto)
@@ -17,7 +17,7 @@
 
 ## Features
 
-### Google Drive
+### download history
 - Folder browsing with pagination
 - Full-text search
 - Direct send (video / audio / photo / document)
@@ -77,7 +77,7 @@ python __main__.py
 
 ---
 
-## Google Drive setup (optional)
+## download history setup (optional)
 
 1. Google Cloud Console → create project → enable **Drive API**
 2. Create **Service Account** → download JSON → rename to `service_account.json`
@@ -126,7 +126,7 @@ MediaVaultBot/
 ├── .env.example
 ├── core/
 │   ├── database.py      # PostgreSQL
-│   ├── drive.py         # Google Drive
+│   ├── drive.py         # download history
 │   ├── ytdlp.py         # Public platform downloader
 │   ├── utils.py
 │   └── state.py
@@ -314,3 +314,7 @@ BOT_USERNAME=
 | `render.yaml` | Render Blueprint |
 | `Procfile` | Generic worker hint |
 | `docker-compose.yml` | Local / VPS |
+
+
+## Note
+Google Drive was removed. This bot is yt-dlp + Postgres only.

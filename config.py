@@ -11,24 +11,32 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 OWNER_ID = int(os.environ.get("OWNER_ID", 0))
 BOT_USERNAME = os.environ.get("BOT_USERNAME", "")
 
-# ─── Google Drive ───
-GOOGLE_SERVICE_ACCOUNT_FILE = os.environ.get("GOOGLE_SERVICE_ACCOUNT_FILE", "service_account.json")
-DRIVE_ROOT_FOLDER_ID = os.environ.get("DRIVE_ROOT_FOLDER_ID", "")
-GOOGLE_CREDENTIALS_FILE = os.environ.get("GOOGLE_CREDENTIALS_FILE", "credentials.json")
-GOOGLE_TOKEN_FILE = os.environ.get("GOOGLE_TOKEN_FILE", "token.json")
-USE_SERVICE_ACCOUNT = os.path.exists(GOOGLE_SERVICE_ACCOUNT_FILE)
 
 # ─── PostgreSQL ───
+def _normalize_database_url(url: str) -> str:
+    """Railway/Render URLs use postgres:// and ?sslmode=require.
+    asyncpg does not accept sslmode — strip it; SSL via connect_args.
+    """
+    from urllib.parse import urlparse, parse_qsl, urlencode, urlunparse
+    if url.startswith("postgres://"):
+        url = "postgresql+asyncpg://" + url[len("postgres://"):]
+    elif url.startswith("postgresql://") and "+asyncpg" not in url:
+        url = "postgresql+asyncpg://" + url[len("postgresql://"):]
+    parsed = urlparse(url)
+    qs = dict(parse_qsl(parsed.query, keep_blank_values=True))
+    for key in list(qs):
+        if key.lower() in ("sslmode", "channel_binding", "sslrootcert", "sslcert", "sslkey"):
+            qs.pop(key, None)
+    return urlunparse(parsed._replace(query=urlencode(qs)))
+
 _raw_db = os.environ.get(
     "DATABASE_URL",
-    "postgresql+asyncpg://postgres:postgres@localhost:5432/mediavault"
+    "postgresql+asyncpg://postgres:postgres@localhost:5432/mediavault",
 )
-# Railway/Render give postgresql:// — SQLAlchemy async needs +asyncpg
-if _raw_db.startswith("postgres://"):
-    _raw_db = _raw_db.replace("postgres://", "postgresql+asyncpg://", 1)
-elif _raw_db.startswith("postgresql://") and "+asyncpg" not in _raw_db:
-    _raw_db = _raw_db.replace("postgresql://", "postgresql+asyncpg://", 1)
-DATABASE_URL = _raw_db
+DATABASE_URL = _normalize_database_url(_raw_db)
+# True when URL looked like a cloud SSL Postgres (Railway/Render)
+DB_SSL = "railway" in _raw_db.lower() or "render.com" in _raw_db.lower() or "sslmode" in os.environ.get("DATABASE_URL", "").lower()
+
 
 # ─── yt-dlp ───
 YTDLP_ENABLED = os.environ.get("YTDLP_ENABLED", "true").lower() == "true"
@@ -112,3 +120,18 @@ If you do not agree, do not use the download features.
 
 Tap <b>I Accept</b> to continue.
 """
+
+# Telegram Stars premium
+PRICE_PER_DAY = int(os.environ.get("PRICE_PER_DAY", "1"))
+MAX_DOWNLOADS_PER_HOUR = int(os.environ.get("MAX_DOWNLOADS_PER_HOUR", "10"))
+MAX_DURATION_SEC = int(os.environ.get("MAX_DURATION_SEC", str(30 * 60)))
+# Domains that require active Premium (Stars). yt-dlp public extractors only.
+_DEFAULT_PREMIUM = ",".join([
+    "reddit.com", "redd.it",
+    "pornhub.com", "xvideos.com", "xnxx.com", "xhamster.com",
+    "spankbang.com", "youporn.com", "redtube.com", "tube8.com",
+    "nhentai.net", "rule34.xxx",
+])
+PREMIUM_DOMAINS = [d.strip() for d in os.environ.get("PREMIUM_DOMAINS", _DEFAULT_PREMIUM).split(",") if d.strip()]
+NSFW_DOMAINS = PREMIUM_DOMAINS  # alias
+

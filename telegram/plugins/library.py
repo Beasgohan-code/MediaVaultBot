@@ -7,8 +7,6 @@ from pyrogram.enums import ParseMode
 from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
 
 from core.database import db
-from core.drive import drive
-from core.utils import format_size
 from telegram.decorators import check_ban
 
 
@@ -27,24 +25,13 @@ async def library_cmd(client: Client, message: Message):
         return
     q = parts[1].strip()
     items = await db.search_library(message.from_user.id, q)
-    # also try Drive
-    drive_hits = []
-    try:
-        drive_hits = await drive.search(q, page_size=8)
-    except Exception:
-        pass
 
-    lines = ["<blockquote>📚 <b>Results</b>"]
+    lines = ["<blockquote>📚 <b>Download history</b>"]
     if items:
-        lines.append("\n<b>History</b>")
-        for it in items[:10]:
-            lines.append(f"• {it.title[:50]} ({it.source})")
-    if drive_hits:
-        lines.append("\n<b>Drive</b>")
-        for f in drive_hits[:8]:
-            lines.append(f"• {f.get('name','?')[:50]}")
-    if len(lines) == 1:
-        lines.append("\nNothing found.")
+        for it in items[:15]:
+            lines.append(f"• {it.title[:55]} ({it.source})")
+    else:
+        lines.append("\nNothing found. Paste a URL to download.")
     lines.append("</blockquote>")
     await message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML)
 

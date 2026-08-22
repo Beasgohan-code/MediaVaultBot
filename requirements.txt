@@ -1,9 +1,6 @@
 kurigram>=2.2.25
 tgrcrypto
 python-dotenv
-google-api-python-client
-google-auth-httplib2
-google-auth-oauthlib
 aiohttp
 aiofiles
 asyncpg

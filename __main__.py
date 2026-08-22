@@ -1,7 +1,7 @@
 #@mediavault
 """
 MediaVaultBot – 2026
-Kurigram + PostgreSQL + Google Drive + yt-dlp
+Kurigram + PostgreSQL + yt-dlp
 Queue • Formats • Quotas • Health • Cleanup
 """
 from __future__ import annotations
@@ -23,7 +23,6 @@ from config import (
     HEALTH_PORT, TEMP_CLEANUP_MINUTES, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_PORT, INSTANCE_ID,
 )
 from core.database import db
-from core.drive import drive
 
 logging.basicConfig(
     level=logging.INFO,
@@ -35,6 +34,21 @@ logging.getLogger("googleapiclient").setLevel(logging.WARNING)
 logging.getLogger("yt_dlp").setLevel(logging.WARNING)
 logger = logging.getLogger("mediavault")
 
+def _patch_upload_timeout():
+    try:
+        import pyrogram.session.session as sess
+        _orig = sess.Session.__init__
+        def _init(self, *a, **kw):
+            _orig(self, *a, **kw)
+            self.WAIT_TIMEOUT = 60
+            self.SLEEP_THRESHOLD = 30
+        sess.Session.__init__ = _init
+        logger.info("Upload timeout patched (60s)")
+    except Exception as e:
+        logger.debug("timeout patch skip: %s", e)
+
+
+
 TMP_ROOTS = [
     Path("/tmp/mediavault_ytdlp"),
     Path("/tmp/mediavault"),
@@ -42,19 +56,18 @@ TMP_ROOTS = [
 
 
 async def health_handler(request):
+    # Always 200 so Railway healthcheck passes while bot is up
+    body = {"status": "ok", "ytdlp": YTDLP_ENABLED, "ts": int(time.time())}
     try:
-        # light DB check
-        n = await db.get_user_count()
-        disk = shutil.disk_usage("/")
-        return web.json_response({
-            "status": "ok",
-            "users": n,
-            "disk_free_gb": round(disk.free / (1024**3), 2),
-            "ytdlp": YTDLP_ENABLED,
-            "ts": int(time.time()),
-        })
+        body["users"] = await db.get_user_count()
     except Exception as e:
-        return web.json_response({"status": "error", "detail": str(e)}, status=500)
+        body["db"] = f"degraded: {e}"
+    try:
+        disk = shutil.disk_usage("/")
+        body["disk_free_gb"] = round(disk.free / (1024**3), 2)
+    except Exception:
+        pass
+    return web.json_response(body)
 
 
 async def start_health_server():
@@ -63,9 +76,10 @@ async def start_health_server():
     app.router.add_get("/", health_handler)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", HEALTH_PORT)
+    port = int(os.environ.get("PORT") or HEALTH_PORT)
+    site = web.TCPSite(runner, "0.0.0.0", port)
     await site.start()
-    logger.info("Health endpoint on :%s/health", HEALTH_PORT)
+    logger.info("Health endpoint on 0.0.0.0:%s/health", port)
 
 
 async def temp_cleanup_loop():
@@ -176,18 +190,14 @@ def create_app() -> Client:
 
 async def main():
     logger.info("Starting MediaVaultBot…")
-    await db.connect()
-    try:
-        await drive.connect()
-        logger.info("Google Drive ready")
-    except Exception as e:
-        logger.warning("Drive not available: %s", e)
-
-    if YTDLP_ENABLED:
-        logger.info("yt-dlp enabled")
-
-    asyncio.create_task(start_health_server())
+    _patch_upload_timeout()
+    # Health first — Railway probes PORT immediately
+    await start_health_server()
     asyncio.create_task(temp_cleanup_loop())
+
+    await db.connect()
+    if YTDLP_ENABLED:
+        logger.info("yt-dlp enabled (no Google Drive)")
 
     app = create_app()
     await app.start()

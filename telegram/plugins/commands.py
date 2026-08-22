@@ -6,7 +6,7 @@ import time
 
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
-from pyrogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton
+from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
 from config import OWNER_ID, START_PIC, AUTO_DELETE_SECONDS, YTDLP_ENABLED
 from core.database import db
@@ -15,48 +15,42 @@ from telegram.decorators import check_ban, admin_only, owner_only
 logger = logging.getLogger(__name__)
 
 START_TEXT = """
-<blockquote><b>MediaVault</b> — Ultimate Personal Media Bot</blockquote>
+<blockquote><b>MediaVault</b> — Personal Media Bot</blockquote>
 
 Hey {mention}
 
 <blockquote><b>What you can do</b>
-• Browse and search Google Drive
-• Paste public URLs (yt-dlp quality/formats/queue)
-• Library, collections, watch later
-• Schedule downloads
-• Inline search and deep links
+• Paste public URLs → quality / formats / queue
+• YouTube, Reddit, X, TikTok and more (yt-dlp)
+• Library · collections · schedule · settings
+• /where — legal “where to watch” (TMDB)
 </blockquote>
 
-Send a search term or paste a URL.
+Accept /tos then paste a link.
 """
 
 HELP_TEXT = """
 <blockquote><b>Help</b></blockquote>
 
-<blockquote><b>Drive</b>
-/browse — folders
-/search query — search Drive
-/favs — favorites
-
-<b>Public URLs</b>
-Paste a link → quality / all formats
+<blockquote>
+<b>Downloads</b>
+Paste a link → quality / formats\n/video /audio · /stars /buy /premium
 /sites /tos /quota /cookies /queue
 
 <b>Library</b>
-/library query
+/search · /library · /recent · /export
 /collections /watchlater /colnew /coladd
 
 <b>Schedule</b>
-/schedule 2h URL
-/schedules
+/schedule 2h URL · /schedules
+
+<b>Other</b>
+/settings /me /status /where /ping /about
 
 <b>Admin</b>
-/stats /autodel /ban /unban /admins /ping
+/stats /broadcast /logs /backup /ban /unban
 
-/settings /me /recent /export /where
-/broadcast /logs /backup /retry (admin)
-
-Accept /tos first. Downloads at your own risk.
+Accept /tos first. Your own risk.
 </blockquote>
 """
 
@@ -100,11 +94,11 @@ async def start_cmd(client: Client, message: Message):
 
     kb = InlineKeyboardMarkup([
         [
-            InlineKeyboardButton("📂 Browse Drive", callback_data="browse:root"),
-            InlineKeyboardButton("🔍 Search", callback_data="search:prompt"),
+            InlineKeyboardButton("📋 Queue", callback_data="noop_q"),
+            InlineKeyboardButton("⚙️ Settings", callback_data="noop_s"),
         ],
         [
-            InlineKeyboardButton("⭐ Favorites", callback_data="favs:list"),
+            InlineKeyboardButton("📚 Library", callback_data="noop_l"),
             InlineKeyboardButton("🌐 Supported Sites", callback_data="sites"),
         ],
         [InlineKeyboardButton("ℹ️ Help", callback_data="help")],
@@ -129,7 +123,11 @@ async def help_cmd(client: Client, message: Message):
 @check_ban
 async def help_cb(client: Client, query):
     await query.answer()
-    await query.message.reply_text(HELP_TEXT, parse_mode=ParseMode.HTML)
+    await query.answer()
+    try:
+        await query.message.edit_text(HELP_TEXT, parse_mode=ParseMode.HTML)
+    except Exception:
+        await query.message.reply_text(HELP_TEXT, parse_mode=ParseMode.HTML)
 
 
 @Client.on_callback_query(filters.regex(r"^sites$"))
@@ -143,7 +141,11 @@ async def sites_cb(client: Client, query):
         "Twitch clips • Facebook public + 1000 more via yt-dlp\n\n"
         "Paste any public URL and the bot will handle it."
     )
-    await query.message.reply_text(text, parse_mode=ParseMode.HTML)
+    await query.answer()
+    try:
+        await query.message.edit_text(text, parse_mode=ParseMode.HTML)
+    except Exception:
+        await query.message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.private & filters.command("ping"))
@@ -164,7 +166,6 @@ async def about_cmd(client: Client, message: Message):
     await message.reply_text(
         """<blockquote><b>MediaVault</b> — personal media bot</blockquote>
 <blockquote>
-• Google Drive library
 • yt-dlp public URLs (YouTube, Reddit, X, …)
 • Queue · schedule · collections · TMDB where-to-watch
 • Custom emoji · reactions · protect_content
@@ -188,7 +189,6 @@ async def stats_cmd(client: Client, message: Message):
 
 👥 Users: <code>{users}</code>
 🗄 Database: PostgreSQL
-☁ Google Drive: ready
 🌐 yt-dlp: {ytdlp}
 ⏱ Auto-delete: <code>{AUTO_DELETE_SECONDS}s</code>
 """
@@ -243,3 +243,21 @@ async def ban_unban_cmd(client: Client, message: Message):
     else:
         await db.unban_user(uid)
         await message.reply_text(f"✅ Unbanned <code>{uid}</code>")
+
+
+@Client.on_callback_query(filters.regex(r"^noop_"))
+async def noop_hint(client: Client, query: CallbackQuery):
+    hints = {"noop_q": "/queue", "noop_s": "/settings", "noop_l": "/library query"}
+    await query.answer(hints.get(query.data, "Use commands"), show_alert=True)
+
+
+@Client.on_callback_query(filters.regex(r"^close$"))
+async def close_cb(client: Client, query: CallbackQuery):
+    await query.answer()
+    try:
+        await query.message.edit_text("<blockquote>Closed.</blockquote>", parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass

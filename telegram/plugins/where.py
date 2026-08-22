@@ -64,7 +64,7 @@ async def tmdb_cb(client: Client, query: CallbackQuery):
     providers = info.get("providers") or []
     link = info.get("link") or f"https://www.themoviedb.org/{media_type}/{sid}"
     if not providers:
-        await query.message.reply_text(
+        await query.message.edit_text(
             f"<blockquote>{ce('ghost', '👻')} No providers listed for region <code>{info.get('region', TMDB_REGION)}</code>\n"
             f"<a href=\"{link}\">Open on TMDB</a></blockquote>",
             parse_mode=ParseMode.HTML,
@@ -76,4 +76,4 @@ async def tmdb_cb(client: Client, query: CallbackQuery):
         lines.append(f"• <b>{p['name']}</b> <i>({p['type']})</i>")
     lines.append(f"\n<a href=\"{link}\">Details / deep links on TMDB</a>")
     lines.append("\n<i>Attribution: TMDB + JustWatch. No unofficial streams.</i></blockquote>")
-    await query.message.reply_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+    await query.message.edit_text("\n".join(lines), parse_mode=ParseMode.HTML, disable_web_page_preview=True)

@@ -114,6 +114,20 @@ class CollectionItem(Base):
     added_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
 
+
+class Premium(Base):
+    __tablename__ = "premium"
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    paid_stars: Mapped[int] = mapped_column(Integer, default=0)
+
+
+class StarBalance(Base):
+    __tablename__ = "star_balances"
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    balance: Mapped[int] = mapped_column(Integer, default=0)
+
+
 class ScheduledJob(Base):
     __tablename__ = "scheduled_jobs"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -132,11 +146,26 @@ class Database:
         self._url = url
 
     async def connect(self) -> None:
-        self.engine = create_async_engine(self._url, echo=False, pool_size=10, max_overflow=20, pool_pre_ping=True)
+        connect_args = {}
+        try:
+            from config import DB_SSL
+            if DB_SSL:
+                # Railway/Render require TLS; asyncpg uses ssl=True (not sslmode=)
+                connect_args["ssl"] = True
+        except Exception:
+            pass
+        self.engine = create_async_engine(
+            self._url,
+            echo=False,
+            pool_size=5,
+            max_overflow=10,
+            pool_pre_ping=True,
+            connect_args=connect_args,
+        )
         self.session_factory = async_sessionmaker(self.engine, expire_on_commit=False, class_=AsyncSession)
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-        logger.info("PostgreSQL ready")
+        logger.info("PostgreSQL ready (ssl=%s)", bool(connect_args.get("ssl")))
         if OWNER_ID:
             await self.ensure_user(OWNER_ID, is_admin=True)
 
@@ -437,6 +466,62 @@ class Database:
                 .order_by(DownloadLog.created_at.desc()).limit(limit)
             )
             return list(r.scalars().all())
+
+
+    async def get_stars(self, user_id: int) -> int:
+        async with await self._session() as session:
+            r = await session.execute(select(StarBalance.balance).where(StarBalance.user_id == user_id))
+            return int(r.scalar_one_or_none() or 0)
+
+    async def add_stars(self, user_id: int, amount: int) -> int:
+        async with await self._session() as session:
+            r = await session.execute(select(StarBalance).where(StarBalance.user_id == user_id))
+            row = r.scalar_one_or_none()
+            if row is None:
+                row = StarBalance(user_id=user_id, balance=amount)
+                session.add(row)
+            else:
+                row.balance = int(row.balance or 0) + amount
+            await session.commit()
+            return int(row.balance)
+
+    async def spend_stars(self, user_id: int, amount: int) -> bool:
+        bal = await self.get_stars(user_id)
+        if bal < amount:
+            return False
+        async with await self._session() as session:
+            r = await session.execute(select(StarBalance).where(StarBalance.user_id == user_id))
+            row = r.scalar_one_or_none()
+            if not row or row.balance < amount:
+                return False
+            row.balance -= amount
+            await session.commit()
+            return True
+
+    async def get_premium(self, user_id: int) -> dict:
+        async with await self._session() as session:
+            r = await session.execute(select(Premium).where(Premium.user_id == user_id))
+            row = r.scalar_one_or_none()
+            if not row or not row.expires_at:
+                return {"active": False, "expires_at": None, "paid_stars": 0}
+            active = row.expires_at > datetime.now(timezone.utc)
+            return {"active": active, "expires_at": row.expires_at, "paid_stars": row.paid_stars or 0}
+
+    async def set_premium(self, user_id: int, days: float, stars: int) -> None:
+        expires = datetime.now(timezone.utc) + timedelta(days=days)
+        async with await self._session() as session:
+            r = await session.execute(select(Premium).where(Premium.user_id == user_id))
+            row = r.scalar_one_or_none()
+            if row is None:
+                session.add(Premium(user_id=user_id, expires_at=expires, paid_stars=stars))
+            else:
+                # extend if still active
+                if row.expires_at and row.expires_at > datetime.now(timezone.utc):
+                    row.expires_at = row.expires_at + timedelta(days=days)
+                else:
+                    row.expires_at = expires
+                row.paid_stars = (row.paid_stars or 0) + stars
+            await session.commit()
 
 
 db = Database()

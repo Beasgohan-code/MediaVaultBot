@@ -19,7 +19,7 @@ from pyrogram.errors import FloodWait
 from config import (
     CAPTION_TEMPLATE, PROGRESS_TEMPLATE, AUTO_DELETE_SECONDS,
     YTDLP_ENABLED, REQUIRE_TOS_ACCEPT, TOS_TEXT, QUALITY_PRESETS,
-    RATE_LIMIT_PER_MIN, YTDLP_PLAYLIST_MAX,
+    RATE_LIMIT_PER_MIN, YTDLP_PLAYLIST_MAX, PREMIUM_DOMAINS, OWNER_ID, MAX_DURATION_SEC,
 )
 from core.database import db
 from core.ytdlp import download as ytdlp_download, is_supported_url, extract_info, list_formats
@@ -33,6 +33,18 @@ from config import SHARE_CHANNEL
 from telegram.decorators import check_ban
 
 logger = logging.getLogger(__name__)
+
+async def _qedit(query: CallbackQuery, text: str, **kwargs):
+    """Edit the button message only — never spam a new one."""
+    try:
+        await query.message.edit_text(text, **kwargs)
+    except Exception:
+        try:
+            # ignore MESSAGE_NOT_MODIFIED
+            pass
+        except Exception:
+            pass
+
 
 URL_REGEX = re.compile(
     r"https?://(?:www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b(?:[-a-zA-Z0-9()@:%_\+.~#?&/=]*)",
@@ -128,6 +140,27 @@ async def url_handler(client: Client, message: Message):
         await send_tos(client, message)
         return
 
+    # Premium-gated domains (optional)
+    try:
+        from config import PREMIUM_DOMAINS, OWNER_ID
+        low = (message.text or "").lower()
+        if PREMIUM_DOMAINS and any(d in low for d in PREMIUM_DOMAINS):
+            if message.from_user.id != OWNER_ID:
+                prem = await db.get_premium(message.from_user.id)
+                if not prem.get("active"):
+                    await message.reply_text(
+                        "<blockquote>⭐ <b>Premium required</b> for this domain.\n"
+                        "Use /premium or /buy stars.</blockquote>",
+                        parse_mode=ParseMode.HTML,
+                        reply_markup=InlineKeyboardMarkup([
+                            [InlineKeyboardButton("⭐ Premium", callback_data="plan:7")],
+                            [InlineKeyboardButton("❌ Cancel", callback_data="close")],
+                        ]),
+                    )
+                    return
+    except Exception:
+        pass
+
     urls = URL_REGEX.findall(message.text or "")
     if not urls:
         return
@@ -164,6 +197,13 @@ async def url_handler(client: Client, message: Message):
         size_str = format_size(filesize) if filesize else "—"
         pl_note = f"\n📜 Playlist detected (max {YTDLP_PLAYLIST_MAX} items)" if is_pl and YTDLP_PLAYLIST_MAX else ""
 
+        duration_sec = int(info.get("duration") or 0)
+        if MAX_DURATION_SEC and duration_sec > MAX_DURATION_SEC:
+            await status.edit_text(
+                f"<blockquote>❌ Too long ({duration_sec // 60} min). Max {MAX_DURATION_SEC // 60} min.</blockquote>",
+                parse_mode=ParseMode.HTML,
+            )
+            return
         age = info.get("age_limit")
         text = (
             f"<blockquote>{ce('fire', '🔥')} <b>{title}</b>\n"
@@ -237,6 +277,7 @@ async def show_formats(client: Client, query: CallbackQuery):
 async def show_presets(client: Client, query: CallbackQuery):
     url_key = query.data.split(":")[1]
     preferred = await db.get_preferred_quality(query.from_user.id)
+    await query.answer()
     await query.message.edit_text(
         "Choose quality:",
         reply_markup=preset_keyboard(url_key, preferred),
@@ -278,7 +319,12 @@ async def start_download_cb(client: Client, query: CallbackQuery):
     if quality in QUALITY_PRESETS:
         await db.set_preferred_quality(uid, quality)
 
-    await query.answer("Queued…")
+    await query.answer("Starting…")
+    # Strip buttons so rapid clicks cannot queue 10 jobs
+    try:
+        await query.message.edit_reply_markup(reply_markup=None)
+    except Exception:
+        pass
 
     status_msg = await query.message.edit_text(
         f"⏳ Queued ({quality})\n<code>{url[:55]}</code>",
@@ -473,3 +519,78 @@ async def quota_cmd(client: Client, message: Message):
     allowed, qmsg = await db.check_quota(message.from_user.id)
     status = "✅ OK" if allowed else "🚫 Exceeded"
     await message.reply_text(f"≡ <b>Daily quota</b>\n\n{status}\n<code>{qmsg}</code>\nResets UTC midnight.", parse_mode=ParseMode.HTML)
+
+
+@Client.on_message(filters.private & filters.command("video"))
+@check_ban
+async def video_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>Usage: <code>/video https://...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    # reuse auto URL flow
+    class _M:
+        pass
+    # simplest: reply instructing — actually set text and call handler
+    message.text = parts[1].strip()
+    await url_handler(client, message)
+
+
+@Client.on_message(filters.private & filters.command("audio"))
+@check_ban
+async def audio_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>Usage: <code>/audio https://...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    # force audio via cache flag
+    url = parts[1].strip()
+    if not await has_accepted_tos(message.from_user.id):
+        await send_tos(client, message)
+        return
+    key = _cache_url(url)
+    # jump straight to audio quality
+    from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🎵 Download Audio", callback_data=f"ydl:{key}:audio")],
+        [InlineKeyboardButton("❌ Cancel", callback_data="close")],
+    ])
+    await message.reply_text(
+        f"<blockquote>🎵 <b>Audio</b>\n<code>{url[:100]}</code></blockquote>",
+        reply_markup=kb,
+        parse_mode=ParseMode.HTML,
+        disable_web_page_preview=True,
+    )
+
+
+@Client.on_message(filters.private & filters.command("dl"))
+@check_ban
+async def dl_cmd(client: Client, message: Message):
+    """Explicit download command: /dl <url>"""
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>Usage: <code>/dl https://...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    message.text = parts[1].strip()
+    await url_handler(client, message)
+
+
+@Client.on_callback_query(filters.regex(r"^close$"))
+async def close_msg(client: Client, query: CallbackQuery):
+    await query.answer()
+    try:
+        await query.message.edit_text("<blockquote>Closed.</blockquote>", parse_mode=ParseMode.HTML)
+    except Exception:
+        try:
+            await query.message.delete()
+        except Exception:
+            pass

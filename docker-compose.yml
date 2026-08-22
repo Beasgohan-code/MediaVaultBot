@@ -5,9 +5,6 @@ services:
     restart: unless-stopped
     env_file: .env
     volumes:
-      - ./service_account.json:/app/service_account.json:ro
-      - ./credentials.json:/app/credentials.json:ro
-      - ./token.json:/app/token.json
       - ./cookies.txt:/app/cookies.txt:ro
       - bot-tmp:/tmp
     depends_on:
