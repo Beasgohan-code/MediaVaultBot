@@ -35,7 +35,7 @@ _raw_db = os.environ.get(
 )
 DATABASE_URL = _normalize_database_url(_raw_db)
 # True when URL looked like a cloud SSL Postgres (Railway/Render)
-DB_SSL = "railway" in _raw_db.lower() or "render.com" in _raw_db.lower() or "sslmode" in os.environ.get("DATABASE_URL", "").lower()
+DB_SSL = any(x in _raw_db.lower() for x in ("railway", "render.com", "neon.tech", "supabase")) or "sslmode" in os.environ.get("DATABASE_URL", "").lower()
 
 
 # ─── yt-dlp ───
