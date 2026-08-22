@@ -23,7 +23,7 @@ Hey {mention}
 • Paste public URLs → quality / formats / queue
 • YouTube, Reddit, X, TikTok and more (yt-dlp)
 • Library · collections · schedule · settings
-• /where — legal “where to watch” (TMDB)
+•  — legal “where to watch” (TMDB)
 </blockquote>
 
 Accept /tos then paste a link.
@@ -45,7 +45,7 @@ Paste a link → quality / formats\n/video /audio · /stars /buy /premium
 /schedule 2h URL · /schedules
 
 <b>Other</b>
-/settings /me /status /where /ping /about
+/settings /me /status  /ping /about
 
 <b>Admin</b>
 /stats /broadcast /logs /backup /ban /unban

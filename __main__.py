@@ -177,12 +177,29 @@ def create_app() -> Client:
     if not OWNER_ID:
         logger.warning("OWNER_ID not set")
 
+    # Explicit allowlist — NEVER load browse/drive even if leftover files exist on the host
+    safe_plugins = [
+        "admin_extra",
+        "commands",
+        "cookies_helper",
+        "extras",
+        "forceupload",
+        "inline",
+        "library",
+        "premium",
+        "queue_ui",
+        "reply_url",
+        "schedule",
+        "search",
+        "settings",
+        "url_download",
+    ]
     return Client(
         "mediavault",
         api_id=API_ID,
         api_hash=API_HASH,
         bot_token=BOT_TOKEN,
-        plugins=dict(root="telegram.plugins"),
+        plugins=dict(root="telegram.plugins", include=safe_plugins),
         parse_mode=ParseMode.HTML,
         in_memory=True,
     )
