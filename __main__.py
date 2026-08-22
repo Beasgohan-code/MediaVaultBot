@@ -179,20 +179,21 @@ def create_app() -> Client:
 
     # Explicit allowlist — NEVER load browse/drive even if leftover files exist on the host
     safe_plugins = [
-        "admin_extra",
-        "commands",
-        "cookies_helper",
-        "extras",
-        "forceupload",
-        "inline",
-        "library",
-        "premium",
-        "queue_ui",
-        "reply_url",
-        "schedule",
-        "search",
-        "settings",
         "url_download",
+        "sites_admin",  # first — URL detect group=-1
+        "commands",
+        "premium",
+        "settings",
+        "queue_ui",
+        "schedule",
+        "library",
+        "search",
+        "reply_url",
+        "forceupload",
+        "extras",
+        "cookies_helper",
+        "admin_extra",
+        "inline",
     ]
     return Client(
         "mediavault",

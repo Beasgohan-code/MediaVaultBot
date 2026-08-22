@@ -249,27 +249,39 @@ class Database:
 
     # ── Settings ──
     async def get_setting(self, key: str, default: Any = None) -> Any:
+        import json
         async with await self._session() as session:
             r = await session.execute(select(Setting.value).where(Setting.key == key))
             val = r.scalar_one_or_none()
             if val is None:
                 return default
-            if val.lower() in ("true", "false"):
+            # JSON (lists/dicts)
+            if isinstance(val, str) and val[:1] in ("[", "{"):
+                try:
+                    return json.loads(val)
+                except Exception:
+                    pass
+            if isinstance(val, str) and val.lower() in ("true", "false"):
                 return val.lower() == "true"
             try:
                 return int(val)
-            except ValueError:
+            except (ValueError, TypeError):
                 return val
 
     async def set_setting(self, key: str, value: Any) -> None:
+        import json
+        if isinstance(value, (list, dict, bool)) or value is None:
+            store = json.dumps(value)
+        else:
+            store = str(value)
         async with await self._session() as session:
             existing = await session.execute(select(Setting).where(Setting.key == key))
             row = existing.scalar_one_or_none()
             if row:
-                row.value = str(value)
+                row.value = store
                 row.updated_at = datetime.now(timezone.utc)
             else:
-                session.add(Setting(key=key, value=str(value)))
+                session.add(Setting(key=key, value=store))
             await session.commit()
 
     # ── Favorites ──
@@ -412,6 +424,14 @@ class Database:
             )
             return list(r.scalars().all())
 
+
+    async def set_user_settings(self, user_id: int, data: dict) -> None:
+        async with await self._session() as session:
+            r = await session.execute(select(User).where(User.user_id == user_id))
+            u = r.scalar_one_or_none()
+            if u is not None:
+                u.settings = data
+                await session.commit()
 
     async def get_user_settings(self, user_id: int) -> dict:
         import json

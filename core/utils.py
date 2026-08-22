@@ -68,3 +68,20 @@ class ProgressTracker:
             total=format_size(self.total),
             eta=eta(self.current, self.total, self.speed),
         )
+
+
+def progress_bar(percent: float, length: int = 10) -> str:
+    percent = max(0.0, min(100.0, float(percent or 0)))
+    filled = int((percent / 100) * length)
+    return "▓" * filled + "░" * (length - filled)
+
+
+def human_duration(seconds) -> str:
+    if not seconds:
+        return "?"
+    seconds = int(seconds)
+    h, rem = divmod(seconds, 3600)
+    m, s = divmod(rem, 60)
+    if h:
+        return f"{h}:{m:02d}:{s:02d}"
+    return f"{m}:{s:02d}"

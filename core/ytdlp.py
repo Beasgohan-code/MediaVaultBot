@@ -227,6 +227,171 @@ async def list_formats(url: str) -> List[Dict[str, Any]]:
     return await loop.run_in_executor(_executor, lambda: list_formats_sync(url))
 
 
+
+
+
+# Domain catalog: homepage + optional yt-dlp search template
+SITE_CATALOG = {
+    "youtube.com": {
+        "name": "YouTube",
+        "home": "https://www.youtube.com",
+        "search": "ytsearch{n}:{q}",
+        "notes": "Video / music",
+    },
+    "youtu.be": {
+        "name": "YouTube (short)",
+        "home": "https://youtu.be",
+        "search": "ytsearch{n}:{q}",
+        "notes": "Short links",
+    },
+    "soundcloud.com": {
+        "name": "SoundCloud",
+        "home": "https://soundcloud.com",
+        "search": "scsearch{n}:{q}",
+        "notes": "Audio",
+    },
+    "reddit.com": {
+        "name": "Reddit",
+        "home": "https://www.reddit.com",
+        "search": None,
+        "notes": "Paste post URL",
+    },
+    "redd.it": {
+        "name": "Reddit short",
+        "home": "https://redd.it",
+        "search": None,
+        "notes": "Paste link",
+    },
+    "x.com": {
+        "name": "X (Twitter)",
+        "home": "https://x.com",
+        "search": None,
+        "notes": "Paste post URL",
+    },
+    "twitter.com": {
+        "name": "Twitter",
+        "home": "https://twitter.com",
+        "search": None,
+        "notes": "Paste post URL",
+    },
+    "tiktok.com": {
+        "name": "TikTok",
+        "home": "https://www.tiktok.com",
+        "search": None,
+        "notes": "Paste video URL",
+    },
+    "instagram.com": {
+        "name": "Instagram",
+        "home": "https://www.instagram.com",
+        "search": None,
+        "notes": "Paste post URL",
+    },
+    "facebook.com": {
+        "name": "Facebook",
+        "home": "https://www.facebook.com",
+        "search": None,
+        "notes": "Paste video URL",
+    },
+    "vimeo.com": {
+        "name": "Vimeo",
+        "home": "https://vimeo.com",
+        "search": None,
+        "notes": "Paste video URL",
+    },
+    "bandcamp.com": {
+        "name": "Bandcamp",
+        "home": "https://bandcamp.com",
+        "search": None,
+        "notes": "Paste track/album URL",
+    },
+    "twitch.tv": {
+        "name": "Twitch",
+        "home": "https://www.twitch.tv",
+        "search": None,
+        "notes": "Clips / VODs — paste URL",
+    },
+    "streamable.com": {
+        "name": "Streamable",
+        "home": "https://streamable.com",
+        "search": None,
+        "notes": "Paste video URL",
+    },
+}
+
+# Backends that support keyword search via yt-dlp
+SEARCH_BACKENDS = {
+    k: (v["search"], v["name"])
+    for k, v in SITE_CATALOG.items()
+    if v.get("search")
+}
+# alias keys for UI
+SEARCH_BACKENDS = {
+    "youtube": ("ytsearch{n}:{q}", "YouTube"),
+    "soundcloud": ("scsearch{n}:{q}", "SoundCloud"),
+}
+
+
+def web_search_sync(query: str, limit: int = 10, source: str = "all") -> List[Dict[str, Any]]:
+    """Search YouTube / SoundCloud (and more) via yt-dlp search extractors."""
+    q = (query or "").strip()
+    if not q:
+        return []
+    limit = max(1, min(int(limit), 20))
+    sources = list(SEARCH_BACKENDS.keys()) if source in ("all", "", None) else [source]
+    results: List[Dict[str, Any]] = []
+    opts = {
+        "quiet": True,
+        "no_warnings": True,
+        "extract_flat": True,
+        "skip_download": True,
+        **_cookie_opts(),
+    }
+    per = max(3, limit // max(1, len(sources))) if source == "all" else limit
+    for key in sources:
+        if key not in SEARCH_BACKENDS:
+            continue
+        tmpl, label = SEARCH_BACKENDS[key]
+        search_url = tmpl.format(n=per, q=q)
+        try:
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                info = ydl.extract_info(search_url, download=False)
+            for e in (info or {}).get("entries") or []:
+                if not e:
+                    continue
+                vid = e.get("id") or ""
+                url = e.get("url") or e.get("webpage_url") or ""
+                if key == "youtube" and vid and not str(url).startswith("http"):
+                    url = f"https://www.youtube.com/watch?v={vid}"
+                if key == "soundcloud" and vid and not str(url).startswith("http"):
+                    url = f"https://soundcloud.com/{vid}" if "/" in str(vid) else url
+                if not url or not str(url).startswith("http"):
+                    # flat entries sometimes only have id
+                    if key == "youtube" and vid:
+                        url = f"https://www.youtube.com/watch?v={vid}"
+                    else:
+                        continue
+                results.append({
+                    "id": str(vid),
+                    "title": e.get("title") or "Untitled",
+                    "url": url,
+                    "duration": e.get("duration"),
+                    "uploader": e.get("uploader") or e.get("channel") or "",
+                    "view_count": e.get("view_count"),
+                    "source": label,
+                    "source_key": key,
+                })
+        except Exception as ex:
+            logger.warning("search %s failed: %s", key, ex)
+    return results[:limit]
+
+
+async def web_search(query: str, limit: int = 10, source: str = "all") -> List[Dict[str, Any]]:
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(
+        _executor, lambda: web_search_sync(query, limit, source)
+    )
+
+
 async def extract_info(url: str, playlist: bool = False) -> Dict[str, Any]:
     def _info():
         opts = _build_ydl_opts("/tmp", playlist=playlist, extra={"skip_download": True})

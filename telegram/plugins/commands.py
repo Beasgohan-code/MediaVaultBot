@@ -20,7 +20,7 @@ START_TEXT = """
 Hey {mention}
 
 <blockquote><b>What you can do</b>
-• Paste public URLs → quality / formats / queue
+• Paste any link → quality picker → download
 • YouTube, Reddit, X, TikTok and more (yt-dlp)
 • Library · collections · schedule · settings
 •  — legal “where to watch” (TMDB)
@@ -38,7 +38,8 @@ Paste a link → quality / formats\n/video /audio · /stars /buy /premium
 /sites /tos /quota /cookies /queue
 
 <b>Library</b>
-/search · /library · /recent · /export
+/search query — YouTube results + buttons
+/library · /recent · /export
 /collections /watchlater /colnew /coladd
 
 <b>Schedule</b>
