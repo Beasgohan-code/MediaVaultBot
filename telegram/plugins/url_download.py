@@ -25,6 +25,9 @@ from core.database import db
 from core.ytdlp import download as ytdlp_download, is_supported_url, extract_info, list_formats
 from core.utils import format_size, ProgressTracker
 from core.queue import queue
+from core.emoji import ce, thinking_frames, ok, warn, progress_header
+from core.telegram_ux import safe_react, safe_chat_action
+from core.media import auto_tags, metadata_card
 from core.media import auto_tags, metadata_card, extract_audio
 from config import SHARE_CHANNEL
 from telegram.decorators import check_ban
@@ -161,12 +164,27 @@ async def url_handler(client: Client, message: Message):
         size_str = format_size(filesize) if filesize else "—"
         pl_note = f"\n📜 Playlist detected (max {YTDLP_PLAYLIST_MAX} items)" if is_pl and YTDLP_PLAYLIST_MAX else ""
 
+        age = info.get("age_limit")
         text = (
-            f"🎬 <b>{title}</b>\n👤 {uploader}\n"
-            f"⏱ {dur_str} | 📦 {size_str} | 🌐 {extractor}{pl_note}\n\n"
-            f"📊 <code>{qmsg}</code>\nChoose quality <i>(your risk)</i>:"
+            f"<blockquote>{ce('fire', '🔥')} <b>{title}</b>\n"
+            f"👤 {uploader}\n"
+            f"⏱ {dur_str} | 📦 {size_str} | 🌐 {extractor}{pl_note}\n"
+            f"{('⚠️ Age: ' + str(age) + '+\n') if age else ''}"
+            f"📊 <code>{qmsg}</code>\n"
+            f"Choose quality <i>(your risk)</i></blockquote>"
         )
-        await status.edit_text(text, reply_markup=preset_keyboard(url_key, preferred), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
+        if age and int(age) >= 18:
+            kb = InlineKeyboardMarkup([[
+                InlineKeyboardButton("🛡 I confirm (18+)", callback_data=f"ageok:{url_key}"),
+                InlineKeyboardButton("Cancel", callback_data="close"),
+            ]])
+            # store preferred in cache side channel via url key only; show confirm first
+            await status.edit_text(
+                text + f"\n\n<blockquote>{warn()} Age-restricted — confirm to continue</blockquote>",
+                reply_markup=kb, parse_mode=ParseMode.HTML, disable_web_page_preview=True,
+            )
+        else:
+            await status.edit_text(text, reply_markup=preset_keyboard(url_key, preferred), parse_mode=ParseMode.HTML, disable_web_page_preview=True)
     except Exception as e:
         logger.warning("extract_info: %s", e)
         await status.edit_text(
@@ -422,6 +440,20 @@ async def cancel_job(client: Client, query: CallbackQuery):
             pass
     else:
         await query.answer("Cannot cancel (not yours or already finished)", show_alert=True)
+
+
+
+@Client.on_callback_query(filters.regex(r"^ageok:([a-f0-9]+)$"))
+@check_ban
+async def age_ok_cb(client: Client, query: CallbackQuery):
+    url_key = query.data.split(":")[1]
+    preferred = await db.get_preferred_quality(query.from_user.id)
+    await query.answer("Confirmed")
+    await query.message.edit_text(
+        f"<blockquote>{ok()} Confirmed. Choose quality:</blockquote>",
+        reply_markup=preset_keyboard(url_key, preferred),
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @Client.on_message(filters.private & filters.command("sites"))

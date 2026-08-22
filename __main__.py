@@ -7,12 +7,6 @@ Queue • Formats • Quotas • Health • Cleanup
 from __future__ import annotations
 
 import asyncio
-
-try:
-    asyncio.get_event_loop()
-except RuntimeError:
-    asyncio.set_event_loop(asyncio.new_event_loop())
-
 import logging
 import os
 import shutil
@@ -26,7 +20,7 @@ from pyrogram.enums import ParseMode
 
 from config import (
     API_ID, API_HASH, BOT_TOKEN, OWNER_ID, YTDLP_ENABLED,
-    HEALTH_PORT, TEMP_CLEANUP_MINUTES,
+    HEALTH_PORT, TEMP_CLEANUP_MINUTES, WEBHOOK_URL, WEBHOOK_PATH, WEBHOOK_PORT, INSTANCE_ID,
 )
 from core.database import db
 from core.drive import drive

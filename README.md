@@ -314,4 +314,3 @@ BOT_USERNAME=
 | `render.yaml` | Render Blueprint |
 | `Procfile` | Generic worker hint |
 | `docker-compose.yml` | Local / VPS |
-# MediaVaultBot

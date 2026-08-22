@@ -53,7 +53,10 @@ Paste a link → quality / all formats
 <b>Admin</b>
 /stats /autodel /ban /unban /admins /ping
 
-Accept /tos first. Downloads are at your own risk.
+/settings /me /recent /export /where
+/broadcast /logs /backup /retry (admin)
+
+Accept /tos first. Downloads at your own risk.
 </blockquote>
 """
 
@@ -72,19 +75,28 @@ async def start_cmd(client: Client, message: Message):
         from urllib.parse import unquote
         try:
             raw = payload[3:]
-            # try base64url then plain
             try:
                 url = base64.urlsafe_b64decode(raw + "==").decode()
             except Exception:
                 url = unquote(raw)
             if url.startswith("http"):
                 await message.reply_text(
-                    f"<blockquote>🔗 Deep link detected</blockquote>\n<code>{url[:100]}</code>\n\nSend this URL in chat to download (after /tos).",
+                    f"<blockquote>🔗 Deep link — send this URL to download (after /tos)</blockquote>\n<code>{url[:120]}</code>",
                     parse_mode=ParseMode.HTML,
                     disable_web_page_preview=True,
                 )
         except Exception:
             pass
+    elif payload.startswith("lib_"):
+        await message.reply_text(
+            f"<blockquote>📚 Library deep link <code>{payload}</code>\nUse /library to search.</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+    elif payload.startswith("col_"):
+        await message.reply_text(
+            f"<blockquote>📂 Collection deep link <code>{payload}</code>\nUse /collections.</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
 
     kb = InlineKeyboardMarkup([
         [
@@ -138,9 +150,31 @@ async def sites_cb(client: Client, query):
 @check_ban
 async def ping_cmd(client: Client, message: Message):
     t0 = time.perf_counter()
-    m = await message.reply_text("🏓 …")
+    m = await message.reply_text("<blockquote>…</blockquote>", parse_mode=ParseMode.HTML)
     dt = (time.perf_counter() - t0) * 1000
-    await m.edit_text(f"🏓 <b>Pong</b> — <code>{dt:.1f} ms</code>", parse_mode=ParseMode.HTML)
+    await m.edit_text(
+        f"<blockquote>🏓 <b>Pong</b>\nLatency: <code>{dt:.1f} ms</code></blockquote>",
+        parse_mode=ParseMode.HTML,
+    )
+
+
+@Client.on_message(filters.private & filters.command("about"))
+@check_ban
+async def about_cmd(client: Client, message: Message):
+    await message.reply_text(
+        """<blockquote><b>MediaVault</b> — personal media bot</blockquote>
+<blockquote>
+• Google Drive library
+• yt-dlp public URLs (YouTube, Reddit, X, …)
+• Queue · schedule · collections · TMDB where-to-watch
+• Custom emoji · reactions · protect_content
+</blockquote>
+<blockquote>
+Legal personal use only. Accept /tos before downloads.
+Deploy: Docker · Railway · Render
+</blockquote>""",
+        parse_mode=ParseMode.HTML,
+    )
 
 
 @Client.on_message(filters.private & filters.command("stats"))

@@ -73,6 +73,15 @@ HEALTH_PORT = int(os.environ.get("HEALTH_PORT", 8080))
 SHARE_CHANNEL = os.environ.get("SHARE_CHANNEL", "")  # channel id to offer "Share" button
 FFMPEG_PATH = os.environ.get("FFMPEG_PATH", "ffmpeg")
 DOWNLOAD_SUBS = os.environ.get("DOWNLOAD_SUBS", "true").lower() == "true"
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY", "")
+TMDB_REGION = os.environ.get("TMDB_REGION", "US")
+WEBHOOK_URL = os.environ.get("WEBHOOK_URL", "")  # e.g. https://xxx.com — empty = polling
+WEBHOOK_PATH = os.environ.get("WEBHOOK_PATH", "/telegram/webhook")
+WEBHOOK_PORT = int(os.environ.get("WEBHOOK_PORT", "8080"))
+INSTANCE_ID = os.environ.get("INSTANCE_ID", "main")  # multi-instance label
+FILENAME_TEMPLATE_DEFAULT = os.environ.get("FILENAME_TEMPLATE_DEFAULT", "{title}")
+
+DOWNLOAD_SUBS = os.environ.get("DOWNLOAD_SUBS", "true").lower() == "true"
 
 TEMP_CLEANUP_MINUTES = int(os.environ.get("TEMP_CLEANUP_MINUTES", 30))
 

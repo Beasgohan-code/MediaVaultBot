@@ -384,4 +384,59 @@ class Database:
             return list(r.scalars().all())
 
 
+    async def get_user_settings(self, user_id: int) -> dict:
+        import json
+        async with await self._session() as session:
+            r = await session.execute(select(User.settings).where(User.id == user_id))
+            raw = r.scalar_one_or_none()
+            if not raw:
+                return {}
+            try:
+                return json.loads(raw)
+            except Exception:
+                return {}
+
+    async def update_user_settings(self, user_id: int, **kwargs) -> dict:
+        import json
+        s = await self.get_user_settings(user_id)
+        s.update({k: v for k, v in kwargs.items() if v is not None})
+        async with await self._session() as session:
+            await session.execute(update(User).where(User.id == user_id).values(settings=json.dumps(s)))
+            await session.commit()
+        return s
+
+    async def get_user_lang(self, user_id: int) -> str:
+        s = await self.get_user_settings(user_id)
+        return s.get("lang", "en")
+
+    async def list_user_ids(self) -> list:
+        async with await self._session() as session:
+            r = await session.execute(select(User.id).where(User.is_banned == False))
+            return [row[0] for row in r.all()]
+
+    async def recent_downloads(self, user_id: int, limit: int = 20):
+        async with await self._session() as session:
+            r = await session.execute(
+                select(DownloadLog).where(DownloadLog.user_id == user_id, DownloadLog.status == "success")
+                .order_by(DownloadLog.created_at.desc()).limit(limit)
+            )
+            return list(r.scalars().all())
+
+    async def recent_errors(self, limit: int = 30):
+        async with await self._session() as session:
+            r = await session.execute(
+                select(DownloadLog).where(DownloadLog.status == "error")
+                .order_by(DownloadLog.created_at.desc()).limit(limit)
+            )
+            return list(r.scalars().all())
+
+    async def failed_for_user(self, user_id: int, limit: int = 10):
+        async with await self._session() as session:
+            r = await session.execute(
+                select(DownloadLog).where(DownloadLog.user_id == user_id, DownloadLog.status == "error")
+                .order_by(DownloadLog.created_at.desc()).limit(limit)
+            )
+            return list(r.scalars().all())
+
+
 db = Database()
