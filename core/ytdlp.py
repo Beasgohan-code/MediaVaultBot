@@ -352,6 +352,8 @@ SEARCH_BACKENDS = {
 SEARCH_BACKENDS = {
     "youtube": ("ytsearch{n}:{q}", "YouTube"),
     "soundcloud": ("scsearch{n}:{q}", "SoundCloud"),
+    "bilibili": ("ytsearch{n}:bilibili {q}", "Bilibili"),
+    "universal": ("ytsearch{n}:{q}", "Universal Web"),
 }
 
 

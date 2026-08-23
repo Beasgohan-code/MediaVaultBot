@@ -32,3 +32,11 @@ def test_site_catalog_entries():
     assert "spotify.com" in SITE_CATALOG
     assert "instagram.com" in SITE_CATALOG
     assert "crunchyroll.com" in SITE_CATALOG
+
+
+def test_search_backends():
+    from core.ytdlp import SEARCH_BACKENDS
+    assert "youtube" in SEARCH_BACKENDS
+    assert "soundcloud" in SEARCH_BACKENDS
+    assert "bilibili" in SEARCH_BACKENDS
+    assert "universal" in SEARCH_BACKENDS
