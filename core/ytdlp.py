@@ -189,8 +189,18 @@ def _download_sync(
     playlist: bool = False,
 ) -> Dict[str, Any]:
     ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist)
-    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
+    try:
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+    except Exception as e:
+        err_str = str(e).lower()
+        if "cookies database" in err_str or "could not find" in err_str:
+            logger.warning("Browser cookie error, retrying without cookiesfrombrowser: %s", e)
+            ydl_opts.pop("cookiesfrombrowser", None)
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+        else:
+            raise e
         if info is None:
             raise RuntimeError("yt-dlp returned no info")
         # playlist → first entry for simplicity of single-send path
