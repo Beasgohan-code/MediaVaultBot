@@ -15,18 +15,18 @@ from telegram.decorators import check_ban, admin_only, owner_only
 logger = logging.getLogger(__name__)
 
 START_TEXT = """
-<blockquote><b>MediaVault</b> — Personal Media Bot</blockquote>
+<blockquote>⚡ <b>MediaVault 2026 Edition</b> — Universal Media Suite</blockquote>
 
-Hey {mention}
+Hey {mention} 👋
 
-<blockquote><b>What you can do</b>
-• Paste any link → quality picker → download
-• YouTube, Reddit, X, TikTok and more (yt-dlp)
-• Library · collections · schedule · settings
-•  — legal “where to watch” (TMDB)
-</blockquote>
+<blockquote><b>🚀 Next-Gen All-Rounder Capabilities</b>
+• <b>Universal Downloader:</b> Paste links for YouTube, Spotify, Instagram, TikTok, Reddit, X, Twitch & 1000+ sites.
+• <b>Media Tools:</b> <code>/rename</code>, <code>/trim</code>, <code>/convert</code>, <code>/compress</code>, <code>/split</code>, <code>/tag</code>, <code>/subs</code>, <code>/formats</code>.
+• <b>Batch Engine:</b> Sequential multi-link & <code>.txt</code> file batch processing (<code>/batch</code>).
+• <b>Custom Thumbnails:</b> Save custom artwork for all your downloads (<code>/savethumb</code>).
+• <b>Cookies & Credentials:</b> Dynamic browser cookie manager (<code>/setbrowser</code>).</blockquote>
 
-Accept /tos then paste a link.
+<blockquote>📜 Please accept <code>/tos</code> before downloading media.</blockquote>
 """
 
 HELP_TEXT = """
