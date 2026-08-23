@@ -45,3 +45,8 @@ def test_search_backends():
 def test_support_url_config():
     from config import SUPPORT_URL
     assert isinstance(SUPPORT_URL, str)
+
+
+def test_thumbnail_manager():
+    from telegram.plugins.thumbnails import get_user_thumb
+    assert get_user_thumb(99999999) is None

@@ -35,28 +35,29 @@ HELP_TEXT = """
 <blockquote>
 <b>Downloads & Platforms</b>
 Paste any link → quality / format picker
-<code>/video</code> <code>/audio</code> <code>/dl</code>
+<code>/video</code> <code>/audio</code> <code>/dl</code> <code>/batch</code> <code>/subs</code>
 <code>/spotify</code> <code>/instagram</code> <code>/anime</code> <code>/formats</code>
 <code>/sites</code> <code>/tos</code> <code>/quota</code> <code>/cookies</code> <code>/queue</code>
 
-<b>Media Processing</b>
-Reply to any file/media with:
+<b>Media Editing & Tools</b>
+Reply to any media/file with:
 <code>/rename new_name.ext</code> (or <code>/rn</code>)
 <code>/trim 00:00:10 00:00:30</code>
-<code>/convert mp3</code> (or mp4, mkv, flac, etc.)
+<code>/convert mp3</code> (or mp4, mkv, flac)
+<code>/compress</code> (compress video size)
+<code>/split 10m</code> (split video in chunks)
+<code>/tag title | artist | album</code> (edit MP3 tags)
+<code>/savethumb</code> <code>/showthumb</code> <code>/delthumb</code> (custom thumbnail)
 
 <b>Library & Collections</b>
-<code>/search query</code> — Web search (YouTube/SoundCloud)
+<code>/search query</code> — Web search
 <code>/library</code> · <code>/recent</code> · <code>/export</code>
 <code>/collections</code> <code>/watchlater</code> <code>/colnew</code> <code>/coladd</code>
 
-<b>Schedule & Premium</b>
+<b>Schedule & System</b>
 <code>/schedule 2h URL</code> · <code>/schedules</code>
-<code>/stars</code> <code>/buy</code> <code>/premium</code>
-
-<b>System & Admin</b>
-<code>/settings</code> <code>/status</code> <code>/ping</code> <code>/about</code>
-<code>/stats</code> <code>/setbrowser</code> <code>/ban</code> <code>/unban</code>
+<code>/stars</code> <code>/buy</code> <code>/premium</code> <code>/settings</code>
+<code>/stats</code> <code>/addsites</code> <code>/setbrowser</code>
 </blockquote>
 """
 

@@ -184,6 +184,8 @@ def create_app() -> Client:
         "commands",
         "rename",
         "media_tools",
+        "thumbnails",
+        "batch",
         "premium",
         "settings",
         "queue_ui",

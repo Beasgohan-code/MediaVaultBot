@@ -387,17 +387,20 @@ async def _run_job(
             chat_id = status_msg.chat.id
             ext = Path(filepath).suffix.lower()
 
+            from telegram.plugins.thumbnails import get_user_thumb
+            thumb = get_user_thumb(user_id)
+
             if quality == "audio" or ext in (".mp3", ".m4a", ".opus", ".ogg", ".flac"):
                 await client.send_audio(
                     chat_id, filepath, caption=caption,
                     title=title2[:64], performer=uploader[:64],
-                    duration=duration or None, parse_mode=ParseMode.HTML,
+                    duration=duration or None, thumb=thumb, parse_mode=ParseMode.HTML,
                 )
             elif ext in (".mp4", ".mkv", ".webm", ".mov"):
                 await client.send_video(
                     chat_id, filepath, caption=caption,
                     supports_streaming=True, duration=duration or None,
-                    parse_mode=ParseMode.HTML,
+                    thumb=thumb, parse_mode=ParseMode.HTML,
                 )
             else:
                 await client.send_document(
@@ -532,6 +535,46 @@ async def anime_cmd(client: Client, message: Message):
     m = URL_REGEX.search(parts[1])
     url = _normalize_url(m.group(1) if m else parts[1].strip())
     await start_download_flow(client, message, url)
+
+
+@Client.on_message(filters.private & filters.command("subs"), group=0)
+@check_ban
+async def subs_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>💬 <b>Subtitles Extractor</b>\n\nUsage: <code>/subs https://youtube.com/watch?v=...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    m = URL_REGEX.search(parts[1])
+    url = _normalize_url(m.group(1) if m else parts[1].strip())
+
+    status = await message.reply_text("<blockquote>💬 Extracting subtitles…</blockquote>", parse_mode=ParseMode.HTML)
+    user_id = message.from_user.id
+    out_dir = str(TMP_DIR / f"subs_{user_id}")
+    os.makedirs(out_dir, exist_ok=True)
+
+    try:
+        from core.ytdlp import _build_ydl_opts
+        import yt_dlp
+        opts = _build_ydl_opts(out_dir, extra={"skip_download": True, "writesubtitles": True, "writeautomaticsub": True})
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            ydl.extract_info(url, download=True)
+
+        files = list(Path(out_dir).glob("*.vtt")) + list(Path(out_dir).glob("*.srt"))
+        if not files:
+            await status.edit_text("<blockquote>❌ No subtitle files found for this URL.</blockquote>", parse_mode=ParseMode.HTML)
+            return
+
+        for f in files[:3]:
+            await client.send_document(message.chat.id, str(f), caption=f"<blockquote>💬 Subtitle: <code>{f.name}</code></blockquote>", parse_mode=ParseMode.HTML)
+        await status.delete()
+    except Exception as e:
+        await status.edit_text(f"<blockquote>❌ Subtitle extraction failed: <code>{_escape(str(e)[:200])}</code></blockquote>", parse_mode=ParseMode.HTML)
+    finally:
+        import shutil
+        shutil.rmtree(out_dir, ignore_errors=True)
 
 
 @Client.on_message(filters.private & filters.command(["formats", "fmt"]), group=0)
