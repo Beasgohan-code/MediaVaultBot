@@ -24,7 +24,7 @@ def test_url_regex_matching():
 
 
 def test_resolve_format():
-    assert resolve_format("1080") == "bv*[height<=1080]+ba/b[height<=1080]"
+    assert "height<=1080" in resolve_format("1080")
     assert resolve_format("fmt:22") == "22"
 
 

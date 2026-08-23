@@ -49,12 +49,12 @@ YTDLP_AGE_LIMIT = int(os.environ.get("YTDLP_AGE_LIMIT", 0))
 YTDLP_PLAYLIST_MAX = int(os.environ.get("YTDLP_PLAYLIST_MAX", 5))  # 0 = disable playlists
 
 QUALITY_PRESETS = {
-    "best": "bv*+ba/b",
-    "1080": "bv*[height<=1080]+ba/b[height<=1080]",
-    "720": "bv*[height<=720]+ba/b[height<=720]",
-    "480": "bv*[height<=480]+ba/b[height<=480]",
-    "360": "bv*[height<=360]+ba/b[height<=360]",
-    "audio": "ba/b",
+    "best": "bv*+ba/b/best",
+    "1080": "bv*[height<=1080]+ba/b[height<=1080]/best[height<=1080]/best",
+    "720": "bv*[height<=720]+ba/b[height<=720]/best[height<=720]/best",
+    "480": "bv*[height<=480]+ba/b[height<=480]/best[height<=480]/best",
+    "360": "bv*[height<=360]+ba/b[height<=360]/best[height<=360]/best",
+    "audio": "ba/b/bestaudio/best",
 }
 
 # ─── Queue ───
