@@ -115,6 +115,18 @@ def _build_ydl_opts(
         "geo_bypass": True,
         "socket_timeout": 30,
         "age_limit": YTDLP_AGE_LIMIT if YTDLP_AGE_LIMIT > 0 else None,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["android", "web", "mweb", "ios"],
+                "player_skip": ["webpage", "configs"],
+            }
+        },
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+        },
     }
     if playlist and YTDLP_PLAYLIST_MAX > 0:
         opts["playlistend"] = YTDLP_PLAYLIST_MAX
