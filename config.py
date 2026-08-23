@@ -76,6 +76,7 @@ CACHE_TTL_SECONDS = int(os.environ.get("CACHE_TTL_SECONDS", 300))
 LOG_CHANNEL = os.environ.get("LOG_CHANNEL", "")
 FSUB_CHANNEL = os.environ.get("FSUB_CHANNEL", "")
 START_PIC = os.environ.get("START_PIC", "https://files.catbox.moe/4b8jvw.jpg")
+SUPPORT_URL = os.environ.get("SUPPORT_URL", "")
 REQUIRE_TOS_ACCEPT = os.environ.get("REQUIRE_TOS_ACCEPT", "true").lower() == "true"
 HEALTH_PORT = int(os.environ.get("HEALTH_PORT", 8080))
 SHARE_CHANNEL = os.environ.get("SHARE_CHANNEL", "")  # channel id to offer "Share" button

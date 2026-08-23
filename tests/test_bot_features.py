@@ -40,3 +40,8 @@ def test_search_backends():
     assert "soundcloud" in SEARCH_BACKENDS
     assert "bilibili" in SEARCH_BACKENDS
     assert "universal" in SEARCH_BACKENDS
+
+
+def test_support_url_config():
+    from config import SUPPORT_URL
+    assert isinstance(SUPPORT_URL, str)

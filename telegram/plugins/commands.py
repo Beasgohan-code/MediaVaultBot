@@ -8,7 +8,7 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import OWNER_ID, START_PIC, AUTO_DELETE_SECONDS, YTDLP_ENABLED
+from config import OWNER_ID, START_PIC, AUTO_DELETE_SECONDS, YTDLP_ENABLED, SUPPORT_URL
 from core.database import db
 from telegram.decorators import check_ban, admin_only, owner_only
 
@@ -98,7 +98,7 @@ async def start_cmd(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
 
-    kb = InlineKeyboardMarkup([
+    buttons = [
         [
             InlineKeyboardButton("📋 Queue", callback_data="noop_q"),
             InlineKeyboardButton("⚙️ Settings", callback_data="noop_s"),
@@ -107,8 +107,15 @@ async def start_cmd(client: Client, message: Message):
             InlineKeyboardButton("📚 Library", callback_data="noop_l"),
             InlineKeyboardButton("🌐 Supported Sites", callback_data="sites"),
         ],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="help")],
-    ])
+    ]
+    if SUPPORT_URL:
+        buttons.append([
+            InlineKeyboardButton("ℹ️ Help", callback_data="help"),
+            InlineKeyboardButton("💬 Support", url=SUPPORT_URL),
+        ])
+    else:
+        buttons.append([InlineKeyboardButton("ℹ️ Help", callback_data="help")])
+    kb = InlineKeyboardMarkup(buttons)
     text = START_TEXT.format(mention=user.mention)
     if START_PIC:
         try:
