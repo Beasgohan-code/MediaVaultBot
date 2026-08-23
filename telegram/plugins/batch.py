@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import html
 import logging
+import os
 import re
 from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
@@ -38,18 +39,24 @@ async def batch_cmd(client: Client, message: Message):
     # Check if replying to a document (.txt)
     reply = message.reply_to_message
     if reply and reply.document and (reply.document.file_name or "").endswith(".txt"):
+        if getattr(reply.document, "file_size", 0) > 1 * 1024 * 1024:
+            await message.reply_text("<blockquote>❌ Batch file too large! Max allowed is 1MB.</blockquote>", parse_mode=ParseMode.HTML)
+            return
+
         status = await message.reply_text("<blockquote>⏳ Reading URLs from batch file…</blockquote>", parse_mode=ParseMode.HTML)
+        downloaded = None
         try:
             downloaded = await client.download_media(message=reply)
             with open(downloaded, "r", encoding="utf-8", errors="ignore") as f:
                 content = f.read()
             found = URL_REGEX.findall(content)
             urls = [_normalize_url(m[0] if isinstance(m, tuple) else m) for m in found]
-            import os
-            os.unlink(downloaded)
         except Exception as e:
             await status.edit_text(f"<blockquote>❌ Error reading batch file: <code>{_escape(str(e))}</code></blockquote>", parse_mode=ParseMode.HTML)
             return
+        finally:
+            if downloaded and os.path.exists(downloaded):
+                os.unlink(downloaded)
         await status.delete()
 
     # Otherwise parse URLs from text command
@@ -79,11 +86,19 @@ async def batch_cmd(client: Client, message: Message):
     )
 
     for i, url in enumerate(urls, 1):
-        try:
-            await start_download_flow(client, message, url)
-        except Exception as e:
-            logger.exception("Batch item error: %s", url)
+        success = False
+        for attempt in range(2):
+            try:
+                await start_download_flow(client, message, url)
+                success = True
+                break
+            except Exception as e:
+                logger.warning("Batch item %s attempt %d failed: %s", url, attempt + 1, e)
+                if attempt == 0:
+                    import asyncio
+                    await asyncio.sleep(10)
+        if not success:
             await message.reply_text(
-                f"<blockquote>❌ Batch item {i}/{len(urls)} failed: <code>{_escape(str(e)[:150])}</code></blockquote>",
+                f"<blockquote>❌ Batch item {i}/{len(urls)} failed after retries: <code>{_escape(url[:80])}</code></blockquote>",
                 parse_mode=ParseMode.HTML,
             )

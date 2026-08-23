@@ -49,6 +49,9 @@ yt-dlp uses cookies so age-restricted, NSFW, or logged-in public content can be 
     await message.reply_text(text, parse_mode=ParseMode.HTML)
 
 
+VALID_BROWSERS = {"chrome", "firefox", "edge", "brave", "opera", "safari", "vivaldi"}
+
+
 @Client.on_message(filters.private & filters.command("setbrowser"))
 @check_ban
 @admin_only
@@ -57,11 +60,21 @@ async def set_browser_cmd(client: Client, message: Message):
     if len(parts) < 2:
         await message.reply_text(
             "<blockquote>Usage: <code>/setbrowser chrome</code>\n"
-            "Supported: chrome, firefox, edge, brave, opera, safari, vivaldi</blockquote>",
+            f"Supported: <code>{', '.join(sorted(VALID_BROWSERS))}</code></blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
     browser_name = parts[1].strip().lower()
+    if browser_name not in VALID_BROWSERS:
+        await message.reply_text(
+            f"<blockquote>❌ Invalid browser <code>{browser_name}</code>!\n"
+            f"Supported: <code>{', '.join(sorted(VALID_BROWSERS))}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+
+    from core.database import db
+    await db.set_setting(f"user_browser_{message.from_user.id}", browser_name)
     import config
     config.YTDLP_COOKIES_FROM_BROWSER = browser_name
     await message.reply_text(

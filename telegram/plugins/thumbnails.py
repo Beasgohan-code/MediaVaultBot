@@ -21,7 +21,7 @@ from telegram.decorators import check_ban
 
 logger = logging.getLogger(__name__)
 
-THUMB_DIR = Path("/tmp/mediavault_thumbs")
+THUMB_DIR = Path("data/thumbs")
 THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
 

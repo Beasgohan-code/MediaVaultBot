@@ -559,8 +559,9 @@ async def subs_cmd(client: Client, message: Message):
         from core.ytdlp import _build_ydl_opts
         import yt_dlp
         opts = _build_ydl_opts(out_dir, extra={"skip_download": True, "writesubtitles": True, "writeautomaticsub": True})
+        opts.pop("format", None)
         with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
+            ydl.download([url])
 
         files = list(Path(out_dir).glob("*.vtt")) + list(Path(out_dir).glob("*.srt"))
         if not files:
