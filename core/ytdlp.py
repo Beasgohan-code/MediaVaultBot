@@ -124,6 +124,21 @@ def _build_ydl_opts(
     return opts
 
 
+def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -> Any:
+    """Run yt-dlp extract_info. If browser cookie database fails, strip cookiesfrombrowser and retry."""
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=download)
+    except Exception as e:
+        err_str = str(e).lower()
+        if ("cookies database" in err_str or "could not find" in err_str or "cookie" in err_str) and "cookiesfrombrowser" in opts:
+            logger.warning("Browser cookie database failed (%s). Retrying without cookiesfrombrowser...", e)
+            opts.pop("cookiesfrombrowser", None)
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                return ydl.extract_info(url, download=download)
+        raise e
+
+
 def list_formats_sync(url: str) -> List[Dict[str, Any]]:
     """Return simplified format list for UI."""
     opts = {
@@ -133,8 +148,7 @@ def list_formats_sync(url: str) -> List[Dict[str, Any]]:
         "noplaylist": True,
         **_cookie_opts(),
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _safe_extract_info(opts, url, download=False)
     if not info:
         return []
     formats = info.get("formats") or []
@@ -189,26 +203,16 @@ def _download_sync(
     playlist: bool = False,
 ) -> Dict[str, Any]:
     ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist)
-    try:
-        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-    except Exception as e:
-        err_str = str(e).lower()
-        if "cookies database" in err_str or "could not find" in err_str:
-            logger.warning("Browser cookie error, retrying without cookiesfrombrowser: %s", e)
-            ydl_opts.pop("cookiesfrombrowser", None)
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(url, download=True)
-        else:
-            raise e
-        if info is None:
-            raise RuntimeError("yt-dlp returned no info")
-        # playlist → first entry for simplicity of single-send path
-        if "entries" in info:
-            entries = [e for e in (info.get("entries") or []) if e]
-            if not entries:
-                raise RuntimeError("Empty playlist")
-            info = entries[0]
+    info = _safe_extract_info(ydl_opts, url, download=True)
+    if info is None:
+        raise RuntimeError("yt-dlp returned no info")
+    # playlist → first entry for simplicity of single-send path
+    if "entries" in info:
+        entries = [e for e in (info.get("entries") or []) if e]
+        if not entries:
+            raise RuntimeError("Empty playlist")
+        info = entries[0]
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         filename = ydl.prepare_filename(info)
         if not os.path.exists(filename):
             base, _ = os.path.splitext(filename)
@@ -389,8 +393,7 @@ def web_search_sync(query: str, limit: int = 10, source: str = "all") -> List[Di
         tmpl, label = SEARCH_BACKENDS[key]
         search_url = tmpl.format(n=per, q=q)
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(search_url, download=False)
+            info = _safe_extract_info(opts, search_url, download=False)
             for e in (info or {}).get("entries") or []:
                 if not e:
                     continue
@@ -432,8 +435,7 @@ async def extract_info(url: str, playlist: bool = False) -> Dict[str, Any]:
     def _info():
         opts = _build_ydl_opts("/tmp", playlist=playlist, extra={"skip_download": True})
         opts.pop("progress_hooks", None)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url, download=False)
+        return _safe_extract_info(opts, url, download=False)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, _info)
 
