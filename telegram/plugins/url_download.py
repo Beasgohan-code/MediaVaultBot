@@ -41,9 +41,9 @@ logger = logging.getLogger(__name__)
 # Same spirit as pyrofork — catch any http(s) link in text
 URL_REGEX = re.compile(
     r"(https?://[^\s<>\"\'\]\)]+|"
-    r"(?:www\.)?(?:youtube\.com|youtu\.be|instagram\.com|tiktok\.com|"
+    r"(?:www\.)?(?:youtube\.com|youtu\.be|spotify\.com|instagram\.com|tiktok\.com|"
     r"twitter\.com|x\.com|reddit\.com|redd\.it|facebook\.com|fb\.watch|"
-    r"vimeo\.com|soundcloud\.com)[^\s<>\"\'\]\)]*)",
+    r"vimeo\.com|soundcloud\.com|crunchyroll\.com|bilibili\.com)[^\s<>\"\'\]\)]*)",
     re.IGNORECASE,
 )
 
@@ -482,6 +482,97 @@ async def handle_link(client: Client, message: Message):
         return
     url = _normalize_url(match.group(1))
     await start_download_flow(client, message, url)
+
+
+@Client.on_message(filters.private & filters.command(["spotify", "sp"]), group=0)
+@check_ban
+async def spotify_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>🎵 <b>Spotify Downloader</b>\n\nUsage: <code>/spotify https://open.spotify.com/track/...</code>\nor <code>/spotify song name</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    query = parts[1].strip()
+    if query.startswith("http"):
+        m = URL_REGEX.search(query)
+        url = _normalize_url(m.group(1) if m else query)
+        await start_download_flow(client, message, url, force_audio=True)
+    else:
+        # Search track on YouTube/SoundCloud fallback via yt-dlp
+        await start_download_flow(client, message, f"ytsearch:{query}", force_audio=True)
+
+
+@Client.on_message(filters.private & filters.command(["instagram", "insta", "ig"]), group=0)
+@check_ban
+async def instagram_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>📸 <b>Instagram Downloader</b>\n\nUsage: <code>/instagram https://www.instagram.com/reel/...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    m = URL_REGEX.search(parts[1])
+    url = _normalize_url(m.group(1) if m else parts[1].strip())
+    await start_download_flow(client, message, url)
+
+
+@Client.on_message(filters.private & filters.command(["anime", "ani"]), group=0)
+@check_ban
+async def anime_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>⛩ <b>Anime Downloader</b>\n\nUsage: <code>/anime https://www.crunchyroll.com/...</code> or paste any anime streaming link.</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    m = URL_REGEX.search(parts[1])
+    url = _normalize_url(m.group(1) if m else parts[1].strip())
+    await start_download_flow(client, message, url)
+
+
+@Client.on_message(filters.private & filters.command(["formats", "fmt"]), group=0)
+@check_ban
+async def formats_cmd(client: Client, message: Message):
+    parts = (message.text or "").split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>🎬 <b>Raw Formats Inspector</b>\n\nUsage: <code>/formats https://youtube.com/watch?v=...</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    m = URL_REGEX.search(parts[1])
+    url = _normalize_url(m.group(1) if m else parts[1].strip())
+
+    status = await message.reply_text("<blockquote>🔎 Extracting raw yt-dlp formats…</blockquote>", parse_mode=ParseMode.HTML)
+    try:
+        from core.ytdlp import list_formats
+        formats = await list_formats(url)
+        if not formats:
+            await status.edit_text("<blockquote>❌ No formats found.</blockquote>", parse_mode=ParseMode.HTML)
+            return
+        url_key = _cache_url(url)
+        rows, row = [], []
+        for f in formats:
+            fid = f["id"]
+            lbl = f["label"]
+            row.append(InlineKeyboardButton(f"[{fid}] {lbl}", callback_data=f"ydl:{url_key}:fmt:{fid}"))
+            if len(row) == 2:
+                rows.append(row)
+                row = []
+        if row:
+            rows.append(row)
+        rows.append([InlineKeyboardButton("❌ Cancel", callback_data="close")])
+        await status.edit_text(
+            f"<blockquote>🎬 <b>Select Raw Format ID</b>\n<code>{_escape(url[:70])}</code></blockquote>",
+            reply_markup=InlineKeyboardMarkup(rows),
+            parse_mode=ParseMode.HTML,
+        )
+    except Exception as e:
+        await status.edit_text(f"<blockquote>❌ Formats extract failed: <code>{_escape(str(e)[:200])}</code></blockquote>", parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.private & filters.command("video"), group=0)

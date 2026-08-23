@@ -244,6 +244,30 @@ SITE_CATALOG = {
         "search": "ytsearch{n}:{q}",
         "notes": "Short links",
     },
+    "spotify.com": {
+        "name": "Spotify",
+        "home": "https://open.spotify.com",
+        "search": "ytsearch{n}:{q}",
+        "notes": "Audio tracks / albums (search fallback)",
+    },
+    "instagram.com": {
+        "name": "Instagram",
+        "home": "https://www.instagram.com",
+        "search": None,
+        "notes": "Reels, Posts, Stories",
+    },
+    "crunchyroll.com": {
+        "name": "Crunchyroll / Anime",
+        "home": "https://www.crunchyroll.com",
+        "search": None,
+        "notes": "Anime episodes",
+    },
+    "bilibili.com": {
+        "name": "Bilibili / Anime",
+        "home": "https://www.bilibili.com",
+        "search": None,
+        "notes": "Anime & videos",
+    },
     "soundcloud.com": {
         "name": "SoundCloud",
         "home": "https://soundcloud.com",

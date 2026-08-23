@@ -30,28 +30,33 @@ Accept /tos then paste a link.
 """
 
 HELP_TEXT = """
-<blockquote><b>Help</b></blockquote>
+<blockquote><b>Help & All-Rounder Command Menu</b></blockquote>
 
 <blockquote>
-<b>Downloads</b>
-Paste a link → quality / formats\n/video /audio · /stars /buy /premium
-/sites /tos /quota /cookies /queue
+<b>Downloads & Platforms</b>
+Paste any link → quality / format picker
+<code>/video</code> <code>/audio</code> <code>/dl</code>
+<code>/spotify</code> <code>/instagram</code> <code>/anime</code> <code>/formats</code>
+<code>/sites</code> <code>/tos</code> <code>/quota</code> <code>/cookies</code> <code>/queue</code>
 
-<b>Library</b>
-/search query — YouTube results + buttons
-/library · /recent · /export
-/collections /watchlater /colnew /coladd
+<b>Media Processing</b>
+Reply to any file/media with:
+<code>/rename new_name.ext</code> (or <code>/rn</code>)
+<code>/trim 00:00:10 00:00:30</code>
+<code>/convert mp3</code> (or mp4, mkv, flac, etc.)
 
-<b>Schedule</b>
-/schedule 2h URL · /schedules
+<b>Library & Collections</b>
+<code>/search query</code> — Web search (YouTube/SoundCloud)
+<code>/library</code> · <code>/recent</code> · <code>/export</code>
+<code>/collections</code> <code>/watchlater</code> <code>/colnew</code> <code>/coladd</code>
 
-<b>Other</b>
-/settings /me /status  /ping /about
+<b>Schedule & Premium</b>
+<code>/schedule 2h URL</code> · <code>/schedules</code>
+<code>/stars</code> <code>/buy</code> <code>/premium</code>
 
-<b>Admin</b>
-/stats /broadcast /logs /backup /ban /unban
-
-Accept /tos first. Your own risk.
+<b>System & Admin</b>
+<code>/settings</code> <code>/status</code> <code>/ping</code> <code>/about</code>
+<code>/stats</code> <code>/setbrowser</code> <code>/ban</code> <code>/unban</code>
 </blockquote>
 """
 

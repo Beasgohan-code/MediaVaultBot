@@ -182,6 +182,8 @@ def create_app() -> Client:
         "url_download",
         "sites_admin",  # first — URL detect group=-1
         "commands",
+        "rename",
+        "media_tools",
         "premium",
         "settings",
         "queue_ui",
