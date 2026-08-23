@@ -61,7 +61,7 @@ def _is_owner(uid: int) -> bool:
     return uid == OWNER_ID
 
 
-@Client.on_message(filters.private & filters.command("addsite"))
+@Client.on_message(filters.private & filters.command(["addsite", "addsites"]))
 @check_ban
 async def addsite_cmd(client: Client, message: Message):
     if not _is_owner(message.from_user.id):
@@ -70,29 +70,29 @@ async def addsite_cmd(client: Client, message: Message):
     parts = (message.text or "").split(maxsplit=1)
     if len(parts) < 2:
         await message.reply_text(
-            f"<blockquote>{ce('pin', '📌')} <b>Add site</b>\n"
-            f"<code>/addsite example.com</code>\n"
-            f"<code>/addsite https://example.com/path</code>\n\n"
-            f"Marks domain as known/supported for /listsites.\n"
-            f"Download still uses yt-dlp — site must work with yt-dlp.</blockquote>",
+            f"<blockquote>{ce('pin', '📌')} <b>Add site(s)</b>\n"
+            f"<code>/addsites example.com</code> or <code>/addsites example1.com, example2.com</code>\n"
+            f"Marks domain as known/supported for /listsites & universal scrapers.</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
-    dom = _norm_domain(parts[1])
-    if not dom:
-        await message.reply_text("❌ Bad domain")
-        return
+    raw_sites = parts[1].split(",")
+    added = []
     sites = await get_extra_sites()
-    if dom in sites:
-        await message.reply_text(f"Already listed: <code>{dom}</code>", parse_mode=ParseMode.HTML)
-        return
-    sites.append(dom)
-    await db.set_setting("custom_sites", sites)
-    await message.reply_text(
-        f"<blockquote>{ok()} Added <code>{dom}</code>\n"
-        f"Total custom: <code>{len(sites)}</code></blockquote>",
-        parse_mode=ParseMode.HTML,
-    )
+    for raw in raw_sites:
+        dom = _norm_domain(raw.strip())
+        if dom and dom not in sites:
+            sites.append(dom)
+            added.append(dom)
+    if added:
+        await db.set_setting("custom_sites", sites)
+        await message.reply_text(
+            f"<blockquote>{ok()} Added <code>{', '.join(added)}</code>\n"
+            f"Total custom sites: <code>{len(sites)}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+    else:
+        await message.reply_text("<blockquote>❌ No new valid domains added.</blockquote>", parse_mode=ParseMode.HTML)
 
 
 @Client.on_message(filters.private & filters.command("delsite"))

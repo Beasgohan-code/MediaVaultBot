@@ -83,13 +83,12 @@ def _page_text(meta: dict, total: int, page: int) -> str:
     page = max(0, min(page, pages - 1))
     src = meta.get("source", "all")
     return (
-        f"<blockquote>{ce('crystal', '🔮')} <b>Web search</b>\n"
+        f"<blockquote>{ce('crystal', '🔮')} <b>Universal Multi-Site Search</b>\n"
         f"Query: <code>{_esc(meta.get('q', ''))}</code>\n"
         f"Source: <code>{_esc(src)}</code> · Hits: <code>{total}</code> · "
         f"Page <code>{page + 1}/{pages}</code>\n\n"
-        f"Sites with search: YouTube, SoundCloud.\n"
-        f"Other sites (Reddit, X, TikTok…): paste the link.\n"
-        f"Premium domains need /premium to download.</blockquote>"
+        f"Search across YouTube, SoundCloud, Bilibili & Universal extractors.\n"
+        f"Tap any result below to download or extract audio.</blockquote>"
     )
 
 

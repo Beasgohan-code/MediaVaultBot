@@ -8,50 +8,56 @@ from pyrogram import Client, filters
 from pyrogram.enums import ParseMode
 from pyrogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
 
-from config import OWNER_ID, START_PIC, AUTO_DELETE_SECONDS, YTDLP_ENABLED
+from config import OWNER_ID, START_PIC, AUTO_DELETE_SECONDS, YTDLP_ENABLED, SUPPORT_URL
 from core.database import db
 from telegram.decorators import check_ban, admin_only, owner_only
 
 logger = logging.getLogger(__name__)
 
 START_TEXT = """
-<blockquote><b>MediaVault</b> — Personal Media Bot</blockquote>
+<blockquote>⚡ <b>MediaVault 2026 Edition</b> — Universal Media Suite</blockquote>
 
-Hey {mention}
+Hey {mention} 👋
 
-<blockquote><b>What you can do</b>
-• Paste any link → quality picker → download
-• YouTube, Reddit, X, TikTok and more (yt-dlp)
-• Library · collections · schedule · settings
-•  — legal “where to watch” (TMDB)
-</blockquote>
+<blockquote><b>🚀 Next-Gen All-Rounder Capabilities</b>
+• <b>Universal Downloader:</b> Paste links for YouTube, Spotify, Instagram, TikTok, Reddit, X, Twitch & 1000+ sites.
+• <b>Media Tools:</b> <code>/rename</code>, <code>/trim</code>, <code>/convert</code>, <code>/compress</code>, <code>/split</code>, <code>/tag</code>, <code>/subs</code>, <code>/formats</code>.
+• <b>Batch Engine:</b> Sequential multi-link & <code>.txt</code> file batch processing (<code>/batch</code>).
+• <b>Custom Thumbnails:</b> Save custom artwork for all your downloads (<code>/savethumb</code>).
+• <b>Cookies & Credentials:</b> Dynamic browser cookie manager (<code>/setbrowser</code>).</blockquote>
 
-Accept /tos then paste a link.
+<blockquote>📜 Please accept <code>/tos</code> before downloading media.</blockquote>
 """
 
 HELP_TEXT = """
-<blockquote><b>Help</b></blockquote>
+<blockquote><b>Help & All-Rounder Command Menu</b></blockquote>
 
 <blockquote>
-<b>Downloads</b>
-Paste a link → quality / formats\n/video /audio · /stars /buy /premium
-/sites /tos /quota /cookies /queue
+<b>Downloads & Platforms</b>
+Paste any link → quality / format picker
+<code>/video</code> <code>/audio</code> <code>/dl</code> <code>/batch</code> <code>/subs</code>
+<code>/spotify</code> <code>/instagram</code> <code>/anime</code> <code>/formats</code>
+<code>/sites</code> <code>/tos</code> <code>/quota</code> <code>/cookies</code> <code>/queue</code>
 
-<b>Library</b>
-/search query — YouTube results + buttons
-/library · /recent · /export
-/collections /watchlater /colnew /coladd
+<b>Media Editing & Tools</b>
+Reply to any media/file with:
+<code>/rename new_name.ext</code> (or <code>/rn</code>)
+<code>/trim 00:00:10 00:00:30</code>
+<code>/convert mp3</code> (or mp4, mkv, flac)
+<code>/compress</code> (compress video size)
+<code>/split 10m</code> (split video in chunks)
+<code>/tag title | artist | album</code> (edit MP3 tags)
+<code>/savethumb</code> <code>/showthumb</code> <code>/delthumb</code> (custom thumbnail)
 
-<b>Schedule</b>
-/schedule 2h URL · /schedules
+<b>Library & Collections</b>
+<code>/search query</code> — Web search
+<code>/library</code> · <code>/recent</code> · <code>/export</code>
+<code>/collections</code> <code>/watchlater</code> <code>/colnew</code> <code>/coladd</code>
 
-<b>Other</b>
-/settings /me /status  /ping /about
-
-<b>Admin</b>
-/stats /broadcast /logs /backup /ban /unban
-
-Accept /tos first. Your own risk.
+<b>Schedule & System</b>
+<code>/schedule 2h URL</code> · <code>/schedules</code>
+<code>/stars</code> <code>/buy</code> <code>/premium</code> <code>/settings</code>
+<code>/stats</code> <code>/addsites</code> <code>/setbrowser</code>
 </blockquote>
 """
 
@@ -93,7 +99,7 @@ async def start_cmd(client: Client, message: Message):
             parse_mode=ParseMode.HTML,
         )
 
-    kb = InlineKeyboardMarkup([
+    buttons = [
         [
             InlineKeyboardButton("📋 Queue", callback_data="noop_q"),
             InlineKeyboardButton("⚙️ Settings", callback_data="noop_s"),
@@ -102,8 +108,15 @@ async def start_cmd(client: Client, message: Message):
             InlineKeyboardButton("📚 Library", callback_data="noop_l"),
             InlineKeyboardButton("🌐 Supported Sites", callback_data="sites"),
         ],
-        [InlineKeyboardButton("ℹ️ Help", callback_data="help")],
-    ])
+    ]
+    if SUPPORT_URL:
+        buttons.append([
+            InlineKeyboardButton("ℹ️ Help", callback_data="help"),
+            InlineKeyboardButton("💬 Support", url=SUPPORT_URL),
+        ])
+    else:
+        buttons.append([InlineKeyboardButton("ℹ️ Help", callback_data="help")])
+    kb = InlineKeyboardMarkup(buttons)
     text = START_TEXT.format(mention=user.mention)
     if START_PIC:
         try:

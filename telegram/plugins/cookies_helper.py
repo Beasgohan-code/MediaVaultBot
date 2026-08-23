@@ -27,34 +27,44 @@ async def cookies_cmd(client: Client, message: Message):
     status_browser = f"✅ `{browser}`" if YTDLP_COOKIES_FROM_BROWSER else "— not set"
 
     text = f"""\
-≡ <b>Cookies helper</b>
+<blockquote>🍪 <b>Universal Browser Cookies & Credentials Helper</b>\n
+yt-dlp uses cookies so age-restricted, NSFW, or logged-in public content can be downloaded using your browser credentials.
 
-yt-dlp uses cookies so age-restricted / logged-in public content can be fetched <b>using credentials you already have</b>.
+<b>Current Configuration</b>
+• 📁 File: {status_file}
+• 🌐 Browser: {status_browser}
 
-<b>Current config</b>
-• File: {status_file}
-• Browser: {status_browser}
+<b>Priority:</b> File &gt; Browser.</blockquote>
 
-Priority: file &gt; browser.
+<blockquote><b>Quick Commands</b>
+• <code>/setbrowser chrome</code> (or firefox, edge, brave, opera, safari, vivaldi)
+• <code>/formats &lt;url&gt;</code> (Inspect raw formats from yt-dlp)</blockquote>
 
-─── <b>How to set</b> ───
-
-<b>1. cookies.txt (works everywhere including Docker)</b>
-1. Install browser extension “Get cookies.txt LOCALLY” (or similar)
-2. Export cookies while logged into YouTube / site
-3. Save as <code>cookies.txt</code> next to the bot
-4. Set in .env:
-<code>YTDLP_COOKIES_FILE=cookies.txt</code>
-5. Restart bot
-
-<b>2. cookies-from-browser (bare metal / VPS with browser)</b>
-In .env:
-<code>YTDLP_COOKIES_FROM_BROWSER=chrome</code>
-or
-<code>YTDLP_COOKIES_FROM_BROWSER=firefox:default-release</code>
-Supported: chrome, chromium, firefox, edge, opera, brave, safari…
-
-⚠️ Cookies let the bot access what <b>your</b> browser session can access.  
-Still your own risk — see /tos.
+<blockquote><b>How to setup cookies.txt</b>
+1. Install browser extension "Get cookies.txt LOCALLY".
+2. Export cookies while logged in.
+3. Upload or place <code>cookies.txt</code> next to bot config.
+4. Set <code>YTDLP_COOKIES_FILE=cookies.txt</code> in .env.</blockquote>
 """
     await message.reply_text(text, parse_mode=ParseMode.HTML)
+
+
+@Client.on_message(filters.private & filters.command("setbrowser"))
+@check_ban
+@admin_only
+async def set_browser_cmd(client: Client, message: Message):
+    parts = message.text.split(maxsplit=1)
+    if len(parts) < 2:
+        await message.reply_text(
+            "<blockquote>Usage: <code>/setbrowser chrome</code>\n"
+            "Supported: chrome, firefox, edge, brave, opera, safari, vivaldi</blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
+    browser_name = parts[1].strip().lower()
+    import config
+    config.YTDLP_COOKIES_FROM_BROWSER = browser_name
+    await message.reply_text(
+        f"<blockquote>✅ Browser cookies source set to <code>{browser_name}</code></blockquote>",
+        parse_mode=ParseMode.HTML,
+    )
