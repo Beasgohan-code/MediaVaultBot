@@ -556,12 +556,17 @@ async def subs_cmd(client: Client, message: Message):
     os.makedirs(out_dir, exist_ok=True)
 
     try:
-        from core.ytdlp import _build_ydl_opts
+        from core.ytdlp import _build_ydl_opts, _executor
         import yt_dlp
         opts = _build_ydl_opts(out_dir, extra={"skip_download": True, "writesubtitles": True, "writeautomaticsub": True})
         opts.pop("format", None)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.download([url])
+
+        def _fetch_subs():
+            with yt_dlp.YoutubeDL(opts) as ydl:
+                ydl.download([url])
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(_executor, _fetch_subs)
 
         files = list(Path(out_dir).glob("*.vtt")) + list(Path(out_dir).glob("*.srt"))
         if not files:

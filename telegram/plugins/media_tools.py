@@ -134,7 +134,14 @@ async def trim_cmd(client: Client, message: Message):
                 str(out_filepath),
             ]
             proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-            await asyncio.wait_for(proc.communicate(), timeout=300)
+            try:
+                await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                raise RuntimeError("FFmpeg trim timed out after 5 minutes")
 
             if proc.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
                 cmd_reencode = [
@@ -145,7 +152,14 @@ async def trim_cmd(client: Client, message: Message):
                     str(out_filepath),
                 ]
                 proc2 = await asyncio.create_subprocess_exec(*cmd_reencode, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-                await asyncio.wait_for(proc2.communicate(), timeout=300)
+                try:
+                    await asyncio.wait_for(proc2.communicate(), timeout=300)
+                except asyncio.TimeoutError:
+                    try:
+                        proc2.kill()
+                    except Exception:
+                        pass
+                    raise RuntimeError("FFmpeg re-encode timed out after 5 minutes")
                 if proc2.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
                     raise RuntimeError("FFmpeg trim failed")
 

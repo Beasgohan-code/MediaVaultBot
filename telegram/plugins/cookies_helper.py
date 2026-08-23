@@ -21,30 +21,21 @@ from telegram.decorators import check_ban, admin_only
 @check_ban
 async def cookies_cmd(client: Client, message: Message):
     file_ok = bool(YTDLP_COOKIES_FILE and os.path.exists(YTDLP_COOKIES_FILE))
-    browser = YTDLP_COOKIES_FROM_BROWSER or "—"
 
-    status_file = f"✅ `{YTDLP_COOKIES_FILE}`" if file_ok else ("❌ missing" if YTDLP_COOKIES_FILE else "— not set")
-    status_browser = f"✅ `{browser}`" if YTDLP_COOKIES_FROM_BROWSER else "— not set"
+    status_file = f"✅ <code>{YTDLP_COOKIES_FILE}</code>" if file_ok else ("❌ missing" if YTDLP_COOKIES_FILE else "— not set")
 
     text = f"""\
-<blockquote>🍪 <b>Universal Browser Cookies & Credentials Helper</b>\n
-yt-dlp uses cookies so age-restricted, NSFW, or logged-in public content can be downloaded using your browser credentials.
+<blockquote>🍪 <b>Cookies Helper (cookies.txt File Only)</b>\n
+To download age-restricted, NSFW, or logged-in public content, provide a <code>cookies.txt</code> file.
 
-<b>Current Configuration</b>
-• 📁 File: {status_file}
-• 🌐 Browser: {status_browser}
-
-<b>Priority:</b> File &gt; Browser.</blockquote>
-
-<blockquote><b>Quick Commands</b>
-• <code>/setbrowser chrome</code> (or firefox, edge, brave, opera, safari, vivaldi)
-• <code>/formats &lt;url&gt;</code> (Inspect raw formats from yt-dlp)</blockquote>
+<b>Current Status</b>
+• 📁 Cookies File: {status_file}</blockquote>
 
 <blockquote><b>How to setup cookies.txt</b>
 1. Install browser extension "Get cookies.txt LOCALLY".
-2. Export cookies while logged in.
-3. Upload or place <code>cookies.txt</code> next to bot config.
-4. Set <code>YTDLP_COOKIES_FILE=cookies.txt</code> in .env.</blockquote>
+2. Log into YouTube or desired site in your browser and export cookies.
+3. Save the exported file as <code>cookies.txt</code> next to the bot configuration.
+4. Set <code>YTDLP_COOKIES_FILE=cookies.txt</code> in your <code>.env</code> file.</blockquote>
 """
     await message.reply_text(text, parse_mode=ParseMode.HTML)
 
