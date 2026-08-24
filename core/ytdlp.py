@@ -117,11 +117,7 @@ def _build_ydl_opts(
         "socket_timeout": 30,
         "age_limit": YTDLP_AGE_LIMIT if YTDLP_AGE_LIMIT > 0 else None,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
-        "extractor_args": {
-            "youtube": {
-                "player_client": ["android", "web", "ios", "mweb"],
-            }
-        },
+        "js_runtimes": {"node": {}},
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -143,7 +139,7 @@ def _build_ydl_opts(
 
 
 def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -> Any:
-    """Run yt-dlp extract_info. Catch cookie/bot errors and retry with fallback player clients."""
+    """Run yt-dlp extract_info. Catch cookie errors and retry cleanly."""
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=download)
@@ -155,22 +151,8 @@ def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -
         if ("cookies database" in err_str or "could not find" in err_str) and "cookiesfrombrowser" in retry_opts:
             logger.warning("Browser cookie database failed (%s). Retrying without cookiesfrombrowser...", e)
             retry_opts.pop("cookiesfrombrowser", None)
-            try:
-                with yt_dlp.YoutubeDL(retry_opts) as ydl:
-                    return ydl.extract_info(url, download=download)
-            except Exception as ex:
-                e = ex
-                err_str = str(e).lower()
-
-        # If YouTube anti-bot / sign-in error, switch player_client to ios/mweb
-        if "sign in" in err_str or "bot" in err_str or "confirm" in err_str or "forbidden" in err_str or "403" in err_str:
-            logger.warning("YouTube anti-bot/403 block detected (%s). Retrying with alternate client...", e)
-            retry_opts.setdefault("extractor_args", {})["youtube"] = {"player_client": ["ios", "mweb", "android"]}
-            try:
-                with yt_dlp.YoutubeDL(retry_opts) as ydl:
-                    return ydl.extract_info(url, download=download)
-            except Exception as ex2:
-                raise RuntimeError("YouTube anti-bot verification active for this video. Please provide a cookies.txt file (/cookies) to download.") from ex2
+            with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                return ydl.extract_info(url, download=download)
 
         raise e
 
