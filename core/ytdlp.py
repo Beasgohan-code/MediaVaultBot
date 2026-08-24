@@ -163,11 +163,14 @@ def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -
                 err_str = str(e).lower()
 
         # If YouTube anti-bot / sign-in error, switch player_client to ios/mweb
-        if "sign in" in err_str or "bot" in err_str or "confirm" in err_str:
-            logger.warning("YouTube anti-bot block detected (%s). Retrying with iOS client...", e)
+        if "sign in" in err_str or "bot" in err_str or "confirm" in err_str or "forbidden" in err_str or "403" in err_str:
+            logger.warning("YouTube anti-bot/403 block detected (%s). Retrying with alternate client...", e)
             retry_opts.setdefault("extractor_args", {})["youtube"] = {"player_client": ["ios", "mweb", "android"]}
-            with yt_dlp.YoutubeDL(retry_opts) as ydl:
-                return ydl.extract_info(url, download=download)
+            try:
+                with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    return ydl.extract_info(url, download=download)
+            except Exception as ex2:
+                raise RuntimeError("YouTube anti-bot verification active for this video. Please provide a cookies.txt file (/cookies) to download.") from ex2
 
         raise e
 
