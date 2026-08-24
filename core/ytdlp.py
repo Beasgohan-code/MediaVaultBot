@@ -119,7 +119,7 @@ def _build_ydl_opts(
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "extractor_args": {
             "youtube": {
-                "player_client": ["ios", "mweb", "android", "tv"],
+                "player_client": ["android", "web", "ios", "mweb"],
             }
         },
         "http_headers": {
@@ -130,6 +130,12 @@ def _build_ydl_opts(
     }
     if playlist and YTDLP_PLAYLIST_MAX > 0:
         opts["playlistend"] = YTDLP_PLAYLIST_MAX
+    if format_str in ("ba/b/bestaudio/best", "ba/b", "ba", "bestaudio"):
+        opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }]
     opts.update(_cookie_opts())
     if extra:
         opts.update(extra)
@@ -159,7 +165,7 @@ def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -
         # If YouTube anti-bot / sign-in error, switch player_client to ios/mweb
         if "sign in" in err_str or "bot" in err_str or "confirm" in err_str:
             logger.warning("YouTube anti-bot block detected (%s). Retrying with iOS client...", e)
-            retry_opts.setdefault("extractor_args", {})["youtube"] = {"player_client": ["ios", "mweb"]}
+            retry_opts.setdefault("extractor_args", {})["youtube"] = {"player_client": ["ios", "mweb", "android"]}
             with yt_dlp.YoutubeDL(retry_opts) as ydl:
                 return ydl.extract_info(url, download=download)
 
@@ -394,7 +400,6 @@ SEARCH_BACKENDS = {
     "youtube": ("ytsearch{n}:{q}", "YouTube"),
     "soundcloud": ("scsearch{n}:{q}", "SoundCloud"),
     "bilibili": ("ytsearch{n}:bilibili {q}", "Bilibili"),
-    "universal": ("ytsearch{n}:{q}", "Universal Web"),
 }
 
 

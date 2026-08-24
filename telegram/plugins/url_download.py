@@ -388,9 +388,13 @@ async def _run_job(
             ext = Path(filepath).suffix.lower()
 
             from telegram.plugins.thumbnails import get_user_thumb
+            from telegram.plugins.media_tools import _extract_video_frame
             thumb = get_user_thumb(user_id)
             if thumb and not os.path.exists(thumb):
                 thumb = None
+
+            if not thumb and ext in (".mp4", ".mkv", ".webm", ".mov"):
+                thumb = await _extract_video_frame(Path(filepath), Path(filepath).parent)
 
             try:
                 dur = int(float(duration or 0))

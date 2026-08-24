@@ -39,7 +39,6 @@ def test_search_backends():
     assert "youtube" in SEARCH_BACKENDS
     assert "soundcloud" in SEARCH_BACKENDS
     assert "bilibili" in SEARCH_BACKENDS
-    assert "universal" in SEARCH_BACKENDS
 
 
 def test_support_url_config():
