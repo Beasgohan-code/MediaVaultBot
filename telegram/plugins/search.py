@@ -81,7 +81,7 @@ def _page_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
         InlineKeyboardButton("🎬 DL #1", callback_data="ws:dl:0"),
         InlineKeyboardButton("🎵 Audio #1", callback_data="ws:aud:0"),
         InlineKeyboardButton("🔄 Retry", callback_data=f"ws:src:{meta.get('source', 'all')}"),
-        InlineKeyboardButton("❌", callback_data="close"),
+        InlineKeyboardButton("❌ Close", callback_data="close"),
     ])
     return InlineKeyboardMarkup(rows)
 
