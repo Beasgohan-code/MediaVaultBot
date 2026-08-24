@@ -5,6 +5,7 @@ Universal yt-dlp with real format listing, quality override, playlist cap, cooki
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import os
 import re
@@ -118,8 +119,7 @@ def _build_ydl_opts(
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "extractor_args": {
             "youtube": {
-                "player_client": ["android", "web", "mweb", "ios"],
-                "player_skip": ["webpage", "configs"],
+                "player_client": ["ios", "mweb", "android", "tv"],
             }
         },
         "http_headers": {
@@ -137,17 +137,32 @@ def _build_ydl_opts(
 
 
 def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -> Any:
-    """Run yt-dlp extract_info. If browser cookie database fails, strip cookiesfrombrowser and retry."""
+    """Run yt-dlp extract_info. Catch cookie/bot errors and retry with fallback player clients."""
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=download)
     except Exception as e:
         err_str = str(e).lower()
-        if ("cookies database" in err_str or "could not find" in err_str or "cookie" in err_str) and "cookiesfrombrowser" in opts:
+        retry_opts = copy.deepcopy(opts)
+
+        # If browser cookies failed on server, strip cookiesfrombrowser
+        if ("cookies database" in err_str or "could not find" in err_str) and "cookiesfrombrowser" in retry_opts:
             logger.warning("Browser cookie database failed (%s). Retrying without cookiesfrombrowser...", e)
-            opts.pop("cookiesfrombrowser", None)
-            with yt_dlp.YoutubeDL(opts) as ydl:
+            retry_opts.pop("cookiesfrombrowser", None)
+            try:
+                with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    return ydl.extract_info(url, download=download)
+            except Exception as ex:
+                e = ex
+                err_str = str(e).lower()
+
+        # If YouTube anti-bot / sign-in error, switch player_client to ios/mweb
+        if "sign in" in err_str or "bot" in err_str or "confirm" in err_str:
+            logger.warning("YouTube anti-bot block detected (%s). Retrying with iOS client...", e)
+            retry_opts.setdefault("extractor_args", {})["youtube"] = {"player_client": ["ios", "mweb"]}
+            with yt_dlp.YoutubeDL(retry_opts) as ydl:
                 return ydl.extract_info(url, download=download)
+
         raise e
 
 
