@@ -259,6 +259,7 @@ async def start_download_flow(
 
     url_key = _cache_url(url)
     preferred = await db.get_preferred_quality(user_id)
+    user_browser = await db.get_setting(f"user_browser_{user_id}", None)
 
     if force_audio:
         # skip picker — go straight to audio job
@@ -266,7 +267,7 @@ async def start_download_flow(
             f"<blockquote>🎵 <b>{_escape(title[:70])}</b>\nStarting audio…</blockquote>",
             parse_mode=ParseMode.HTML,
         )
-        await _run_job(client, status, user_id, url, "audio", title, duration, uploader)
+        await _run_job(client, status, user_id, url, "audio", title, duration, uploader, browser_override=user_browser)
         return
 
     text = (
@@ -299,6 +300,7 @@ async def _run_job(
     title: str,
     duration: int,
     uploader: str,
+    browser_override: str | None = None,
 ):
     # remember preferred (not for fmt:)
     if quality in QUALITY_PRESETS or quality in ("best", "audio"):
@@ -360,6 +362,7 @@ async def _run_job(
                 quality=quality,
                 progress_callback=progress_hook,
                 cancel_check=lambda: cancel_flag["c"],
+                browser_override=browser_override,
             )
             filepath = result.get("filepath")
             title2 = result.get("title") or title
@@ -569,14 +572,12 @@ async def subs_cmd(client: Client, message: Message):
     os.makedirs(out_dir, exist_ok=True)
 
     try:
-        from core.ytdlp import _build_ydl_opts, _executor
-        import yt_dlp
-        opts = _build_ydl_opts(out_dir, extra={"skip_download": True, "writesubtitles": True, "writeautomaticsub": True})
+        from core.ytdlp import _build_ydl_opts, _executor, _safe_extract_info
+        opts = _build_ydl_opts(out_dir, extra={"writesubtitles": True, "writeautomaticsub": True, "subtitleslangs": ["en", "hi", "all"]})
         opts.pop("format", None)
 
         def _fetch_subs():
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                ydl.download([url])
+            _safe_extract_info(opts, url, download=True)
 
         loop = asyncio.get_running_loop()
         await loop.run_in_executor(_executor, _fetch_subs)

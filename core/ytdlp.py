@@ -75,15 +75,17 @@ def _progress_hook_factory(callback: Optional[Callable[[dict], None]], cancel_ch
     return hook
 
 
-def _cookie_opts() -> Dict[str, Any]:
+def _cookie_opts(browser_override: str | None = None) -> Dict[str, Any]:
     opts: Dict[str, Any] = {}
     if YTDLP_COOKIES_FILE and os.path.exists(YTDLP_COOKIES_FILE):
         opts["cookiefile"] = YTDLP_COOKIES_FILE
-    elif YTDLP_COOKIES_FROM_BROWSER:
-        parts = YTDLP_COOKIES_FROM_BROWSER.strip().split(":")
-        browser = parts[0].lower()
-        profile = parts[1] if len(parts) > 1 else None
-        opts["cookiesfrombrowser"] = (browser, profile, None, None)
+    else:
+        browser_val = browser_override or YTDLP_COOKIES_FROM_BROWSER
+        if browser_val and browser_val.lower() not in ("none", "off", ""):
+            parts = browser_val.strip().split(":")
+            browser = parts[0].lower()
+            profile = parts[1] if len(parts) > 1 else None
+            opts["cookiesfrombrowser"] = (browser, profile, None, None)
     return opts
 
 
@@ -94,6 +96,7 @@ def _build_ydl_opts(
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
     extra: Optional[Dict[str, Any]] = None,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
     outtmpl = str(Path(out_dir) / YTDLP_OUTPUT_TEMPLATE)
     opts: Dict[str, Any] = {
@@ -132,7 +135,7 @@ def _build_ydl_opts(
             "preferredcodec": "mp3",
             "preferredquality": "192",
         }]
-    opts.update(_cookie_opts())
+    opts.update(_cookie_opts(browser_override))
     if extra:
         opts.update(extra)
     return opts
@@ -478,6 +481,7 @@ async def download(
     progress_callback: Optional[Callable[[dict], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
     if not is_supported_url(url):
         raise ValueError("URL not supported or yt-dlp disabled")
@@ -487,7 +491,7 @@ async def download(
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         _executor,
-        lambda: _download_sync(url, out_dir, fmt, progress_callback, cancel_check, playlist),
+        lambda: _download_sync(url, out_dir, fmt, progress_callback, cancel_check, playlist, browser_override),
     )
     path = result.get("filepath")
     if not path or not os.path.exists(path):
