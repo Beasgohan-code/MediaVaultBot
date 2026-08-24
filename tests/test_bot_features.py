@@ -41,6 +41,8 @@ def test_search_backends():
     assert "bilibili" in SEARCH_BACKENDS
     assert "reddit" in SEARCH_BACKENDS
     assert "instagram" in SEARCH_BACKENDS
+    assert "x" in SEARCH_BACKENDS
+    assert "spotify" in SEARCH_BACKENDS
 
 
 def test_support_url_config():
