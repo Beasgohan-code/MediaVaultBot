@@ -94,7 +94,7 @@ def _page_text(meta: dict, total: int, page: int) -> str:
 
 async def _run_search(status_msg, uid: int, query: str, source: str = "all"):
     try:
-        results = await web_search(query, limit=30, source=source)
+        results = await web_search(query, limit=50, source=source)
     except Exception as e:
         logger.exception("search")
         await status_msg.edit_text(

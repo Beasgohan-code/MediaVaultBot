@@ -139,7 +139,7 @@ def _build_ydl_opts(
 
 
 def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -> Any:
-    """Run yt-dlp extract_info. Catch cookie errors and retry cleanly."""
+    """Run yt-dlp extract_info. Catch cookie, age-restriction and bot verification errors cleanly."""
     try:
         with yt_dlp.YoutubeDL(opts) as ydl:
             return ydl.extract_info(url, download=download)
@@ -151,8 +151,18 @@ def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -
         if ("cookies database" in err_str or "could not find" in err_str) and "cookiesfrombrowser" in retry_opts:
             logger.warning("Browser cookie database failed (%s). Retrying without cookiesfrombrowser...", e)
             retry_opts.pop("cookiesfrombrowser", None)
-            with yt_dlp.YoutubeDL(retry_opts) as ydl:
-                return ydl.extract_info(url, download=download)
+            try:
+                with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    return ydl.extract_info(url, download=download)
+            except Exception as ex:
+                e = ex
+                err_str = str(e).lower()
+
+        if "sign in to confirm your age" in err_str or "age-restricted" in err_str:
+            raise RuntimeError("🔞 This video is age-restricted by YouTube. Please configure a cookies.txt file (/cookies) to access age-restricted videos.") from e
+
+        if "sign in to confirm you're not a bot" in err_str:
+            raise RuntimeError("🤖 YouTube anti-bot verification active for this video. Please set up a cookies.txt file (/cookies) to bypass YouTube verification.") from e
 
         raise e
 
