@@ -389,13 +389,15 @@ async def _run_job(
 
             from telegram.plugins.thumbnails import get_user_thumb
             thumb = get_user_thumb(user_id)
-
-            from telegram.plugins.thumbnails import get_user_thumb
-            thumb = get_user_thumb(user_id)
             if thumb and not os.path.exists(thumb):
                 thumb = None
 
-            dur = int(duration) if duration and str(duration).isdigit() and int(duration) > 0 else None
+            try:
+                dur = int(float(duration or 0))
+                if dur <= 0:
+                    dur = 0
+            except (ValueError, TypeError):
+                dur = 0
 
             if quality == "audio" or ext in (".mp3", ".m4a", ".opus", ".ogg", ".flac"):
                 await client.send_audio(
