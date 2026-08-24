@@ -232,8 +232,9 @@ def _download_sync(
     progress_callback: Optional[Callable[[dict], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
-    ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist)
+    ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist, browser_override=browser_override)
     info = _safe_extract_info(ydl_opts, url, download=True)
     if info is None:
         raise RuntimeError("yt-dlp returned no info")
