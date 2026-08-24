@@ -395,6 +395,8 @@ SEARCH_BACKENDS = {
     "youtube": ("ytsearch{n}:{q}", "YouTube"),
     "soundcloud": ("scsearch{n}:{q}", "SoundCloud"),
     "bilibili": ("ytsearch{n}:bilibili {q}", "Bilibili"),
+    "reddit": ("ytsearch{n}:site:reddit.com {q}", "Reddit"),
+    "instagram": ("ytsearch{n}:site:instagram.com {q}", "Instagram"),
 }
 
 
