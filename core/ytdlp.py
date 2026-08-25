@@ -102,6 +102,7 @@ def _build_ydl_opts(
     opts: Dict[str, Any] = {
         "format": format_str or YTDLP_FORMAT,
         "outtmpl": outtmpl,
+        "merge_output_format": "mp4",
         "noplaylist": not playlist,
         "quiet": True,
         "no_warnings": True,
@@ -275,15 +276,27 @@ def _download_sync(
         filename = ydl.prepare_filename(info)
         if not os.path.exists(filename):
             base, _ = os.path.splitext(filename)
+            found = False
             for ext in (".mp4", ".mkv", ".webm", ".mp3", ".m4a", ".ogg", ".mov"):
                 candidate = base + ext
                 if os.path.exists(candidate):
                     filename = candidate
+                    found = True
                     break
+            if not found:
+                # Scan output directory for the latest file created
+                candidates = [
+                    os.path.join(out_dir, f) for f in os.listdir(out_dir)
+                    if not f.endswith((".info.json", ".jpg", ".webp", ".png", ".vtt", ".srt", ".part"))
+                ]
+                if candidates:
+                    filename = max(candidates, key=os.path.getmtime)
+
+        real_ext = os.path.splitext(filename)[1].lstrip(".").lower() or info.get("ext") or "mp4"
         return {
             "id": info.get("id"),
             "title": info.get("title") or "Unknown",
-            "ext": info.get("ext"),
+            "ext": real_ext,
             "filesize": info.get("filesize") or info.get("filesize_approx"),
             "duration": info.get("duration"),
             "uploader": info.get("uploader") or info.get("channel"),
