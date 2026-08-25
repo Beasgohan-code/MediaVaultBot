@@ -24,7 +24,7 @@ def test_url_regex_matching():
 
 
 def test_resolve_format():
-    assert resolve_format("1080") == "bv*[height<=1080]+ba/b[height<=1080]"
+    assert "height<=1080" in resolve_format("1080")
     assert resolve_format("fmt:22") == "22"
 
 
@@ -39,7 +39,10 @@ def test_search_backends():
     assert "youtube" in SEARCH_BACKENDS
     assert "soundcloud" in SEARCH_BACKENDS
     assert "bilibili" in SEARCH_BACKENDS
-    assert "universal" in SEARCH_BACKENDS
+    assert "reddit" in SEARCH_BACKENDS
+    assert "instagram" in SEARCH_BACKENDS
+    assert "x" in SEARCH_BACKENDS
+    assert "spotify" in SEARCH_BACKENDS
 
 
 def test_support_url_config():

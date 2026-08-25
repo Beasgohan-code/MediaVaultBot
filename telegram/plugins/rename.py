@@ -8,6 +8,7 @@ from __future__ import annotations
 import html
 import logging
 import os
+import shutil
 import time
 from pathlib import Path
 
@@ -120,8 +121,8 @@ async def rename_cmd(client: Client, message: Message):
         if not downloaded_path or not os.path.exists(downloaded_path):
             raise RuntimeError("Failed to download media file")
 
-        # Rename local file
-        os.rename(downloaded_path, target_filepath)
+        # Rename local file safely across filesystems
+        shutil.move(downloaded_path, target_filepath)
 
         try:
             await status.edit_text(

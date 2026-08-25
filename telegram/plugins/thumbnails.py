@@ -21,7 +21,7 @@ from telegram.decorators import check_ban
 
 logger = logging.getLogger(__name__)
 
-THUMB_DIR = Path("/tmp/mediavault_thumbs")
+THUMB_DIR = Path("data/thumbs")
 THUMB_DIR.mkdir(parents=True, exist_ok=True)
 
 
@@ -41,9 +41,9 @@ async def savethumb_cmd(client: Client, message: Message):
     await db.ensure_user(user.id, user.username, user.first_name)
 
     reply = message.reply_to_message
-    photo = (reply.photo or message.photo) if reply else message.photo
+    target_msg = reply if (reply and reply.photo) else (message if message.photo else None)
 
-    if not photo:
+    if not target_msg or not target_msg.photo:
         await message.reply_text(
             "<blockquote>🖼 <b>Custom Thumbnail Manager</b>\n\n"
             "Please <b>reply to a photo</b> (or send a photo with caption) with <code>/savethumb</code> to save it as your custom thumbnail for all downloads!</blockquote>",
@@ -55,7 +55,7 @@ async def savethumb_cmd(client: Client, message: Message):
     thumb_path = THUMB_DIR / f"{user.id}.jpg"
 
     try:
-        await client.download_media(message=photo, file_name=str(thumb_path))
+        await client.download_media(message=target_msg, file_name=str(thumb_path))
         await status.edit_text(
             "<blockquote>✅ <b>Custom thumbnail saved successfully!</b>\n"
             "This thumbnail will now be applied to all your video and audio downloads.</blockquote>",

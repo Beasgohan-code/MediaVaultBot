@@ -259,6 +259,7 @@ async def start_download_flow(
 
     url_key = _cache_url(url)
     preferred = await db.get_preferred_quality(user_id)
+    user_browser = await db.get_setting(f"user_browser_{user_id}", None)
 
     if force_audio:
         # skip picker — go straight to audio job
@@ -266,7 +267,7 @@ async def start_download_flow(
             f"<blockquote>🎵 <b>{_escape(title[:70])}</b>\nStarting audio…</blockquote>",
             parse_mode=ParseMode.HTML,
         )
-        await _run_job(client, status, user_id, url, "audio", title, duration, uploader)
+        await _run_job(client, status, user_id, url, "audio", title, duration, uploader, browser_override=user_browser)
         return
 
     text = (
@@ -299,6 +300,7 @@ async def _run_job(
     title: str,
     duration: int,
     uploader: str,
+    browser_override: str | None = None,
 ):
     # remember preferred (not for fmt:)
     if quality in QUALITY_PRESETS or quality in ("best", "audio"):
@@ -360,6 +362,7 @@ async def _run_job(
                 quality=quality,
                 progress_callback=progress_hook,
                 cancel_check=lambda: cancel_flag["c"],
+                browser_override=browser_override,
             )
             filepath = result.get("filepath")
             title2 = result.get("title") or title
@@ -388,18 +391,31 @@ async def _run_job(
             ext = Path(filepath).suffix.lower()
 
             from telegram.plugins.thumbnails import get_user_thumb
+            from telegram.plugins.media_tools import _extract_video_frame
             thumb = get_user_thumb(user_id)
+            if thumb and not os.path.exists(thumb):
+                thumb = None
+
+            if not thumb and ext in (".mp4", ".mkv", ".webm", ".mov"):
+                thumb = await _extract_video_frame(Path(filepath), Path(filepath).parent)
+
+            try:
+                dur = int(float(duration or 0))
+                if dur <= 0:
+                    dur = 0
+            except (ValueError, TypeError):
+                dur = 0
 
             if quality == "audio" or ext in (".mp3", ".m4a", ".opus", ".ogg", ".flac"):
                 await client.send_audio(
                     chat_id, filepath, caption=caption,
                     title=title2[:64], performer=uploader[:64],
-                    duration=duration or None, thumb=thumb, parse_mode=ParseMode.HTML,
+                    duration=dur, thumb=thumb, parse_mode=ParseMode.HTML,
                 )
             elif ext in (".mp4", ".mkv", ".webm", ".mov"):
                 await client.send_video(
                     chat_id, filepath, caption=caption,
-                    supports_streaming=True, duration=duration or None,
+                    supports_streaming=True, duration=dur,
                     thumb=thumb, parse_mode=ParseMode.HTML,
                 )
             else:
@@ -556,11 +572,15 @@ async def subs_cmd(client: Client, message: Message):
     os.makedirs(out_dir, exist_ok=True)
 
     try:
-        from core.ytdlp import _build_ydl_opts
-        import yt_dlp
-        opts = _build_ydl_opts(out_dir, extra={"skip_download": True, "writesubtitles": True, "writeautomaticsub": True})
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            ydl.extract_info(url, download=True)
+        from core.ytdlp import _build_ydl_opts, _executor, _safe_extract_info
+        opts = _build_ydl_opts(out_dir, extra={"writesubtitles": True, "writeautomaticsub": True, "subtitleslangs": ["en", "hi", "all"]})
+        opts.pop("format", None)
+
+        def _fetch_subs():
+            _safe_extract_info(opts, url, download=True)
+
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(_executor, _fetch_subs)
 
         files = list(Path(out_dir).glob("*.vtt")) + list(Path(out_dir).glob("*.srt"))
         if not files:

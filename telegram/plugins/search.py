@@ -32,12 +32,18 @@ def _esc(s: str) -> str:
     return html.escape(s or "")
 
 
-def _source_kb(active: str) -> list:
+def _source_kb(active: str) -> list[list[InlineKeyboardButton]]:
+    rows = []
     row = []
     for key, (_, label) in [("all", (None, "All")), *SEARCH_BACKENDS.items()]:
         mark = "•" if active == key else ""
         row.append(InlineKeyboardButton(f"{mark}{label}{mark}", callback_data=f"ws:src:{key}"))
-    return row
+        if len(row) == 3:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    return rows
 
 
 def _page_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
@@ -49,7 +55,7 @@ def _page_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
     start = page * PAGE_SIZE
     chunk = items[start : start + PAGE_SIZE]
 
-    rows = [_source_kb(meta.get("source", "all"))]
+    rows = _source_kb(meta.get("source", "all"))
     for i, it in enumerate(chunk):
         idx = start + i
         title = (it.get("title") or "?")[:40]
@@ -70,10 +76,12 @@ def _page_kb(user_id: int, page: int) -> InlineKeyboardMarkup:
         nav.append(InlineKeyboardButton("➡️", callback_data=f"ws:pg:{page + 1}"))
     if nav:
         rows.append(nav)
+
     rows.append([
         InlineKeyboardButton("🎬 DL #1", callback_data="ws:dl:0"),
         InlineKeyboardButton("🎵 Audio #1", callback_data="ws:aud:0"),
-        InlineKeyboardButton("❌", callback_data="close"),
+        InlineKeyboardButton("🔄 Retry", callback_data=f"ws:src:{meta.get('source', 'all')}"),
+        InlineKeyboardButton("❌ Close", callback_data="close"),
     ])
     return InlineKeyboardMarkup(rows)
 
@@ -94,7 +102,7 @@ def _page_text(meta: dict, total: int, page: int) -> str:
 
 async def _run_search(status_msg, uid: int, query: str, source: str = "all"):
     try:
-        results = await web_search(query, limit=15, source=source)
+        results = await web_search(query, limit=50, source=source)
     except Exception as e:
         logger.exception("search")
         await status_msg.edit_text(

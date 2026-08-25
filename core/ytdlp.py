@@ -5,6 +5,7 @@ Universal yt-dlp with real format listing, quality override, playlist cap, cooki
 from __future__ import annotations
 
 import asyncio
+import copy
 import logging
 import os
 import re
@@ -74,15 +75,17 @@ def _progress_hook_factory(callback: Optional[Callable[[dict], None]], cancel_ch
     return hook
 
 
-def _cookie_opts() -> Dict[str, Any]:
+def _cookie_opts(browser_override: str | None = None) -> Dict[str, Any]:
     opts: Dict[str, Any] = {}
     if YTDLP_COOKIES_FILE and os.path.exists(YTDLP_COOKIES_FILE):
         opts["cookiefile"] = YTDLP_COOKIES_FILE
-    elif YTDLP_COOKIES_FROM_BROWSER:
-        parts = YTDLP_COOKIES_FROM_BROWSER.strip().split(":")
-        browser = parts[0].lower()
-        profile = parts[1] if len(parts) > 1 else None
-        opts["cookiesfrombrowser"] = (browser, profile, None, None)
+    else:
+        browser_val = browser_override or YTDLP_COOKIES_FROM_BROWSER
+        if browser_val and browser_val.lower() not in ("none", "off", ""):
+            parts = browser_val.strip().split(":")
+            browser = parts[0].lower()
+            profile = parts[1] if len(parts) > 1 else None
+            opts["cookiesfrombrowser"] = (browser, profile, None, None)
     return opts
 
 
@@ -93,6 +96,7 @@ def _build_ydl_opts(
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
     extra: Optional[Dict[str, Any]] = None,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
     outtmpl = str(Path(out_dir) / YTDLP_OUTPUT_TEMPLATE)
     opts: Dict[str, Any] = {
@@ -115,13 +119,55 @@ def _build_ydl_opts(
         "geo_bypass": True,
         "socket_timeout": 30,
         "age_limit": YTDLP_AGE_LIMIT if YTDLP_AGE_LIMIT > 0 else None,
+        "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+        "js_runtimes": {"node": {}},
+        "http_headers": {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
+        },
     }
     if playlist and YTDLP_PLAYLIST_MAX > 0:
         opts["playlistend"] = YTDLP_PLAYLIST_MAX
-    opts.update(_cookie_opts())
+    if format_str in ("ba/b/bestaudio/best", "ba/b", "ba", "bestaudio"):
+        opts["postprocessors"] = [{
+            "key": "FFmpegExtractAudio",
+            "preferredcodec": "mp3",
+            "preferredquality": "192",
+        }]
+    opts.update(_cookie_opts(browser_override))
     if extra:
         opts.update(extra)
     return opts
+
+
+def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -> Any:
+    """Run yt-dlp extract_info. Catch cookie, age-restriction and bot verification errors cleanly."""
+    try:
+        with yt_dlp.YoutubeDL(opts) as ydl:
+            return ydl.extract_info(url, download=download)
+    except Exception as e:
+        err_str = str(e).lower()
+        retry_opts = copy.deepcopy(opts)
+
+        # If browser cookies failed on server, strip cookiesfrombrowser
+        if ("cookies database" in err_str or "could not find" in err_str) and "cookiesfrombrowser" in retry_opts:
+            logger.warning("Browser cookie database failed (%s). Retrying without cookiesfrombrowser...", e)
+            retry_opts.pop("cookiesfrombrowser", None)
+            try:
+                with yt_dlp.YoutubeDL(retry_opts) as ydl:
+                    return ydl.extract_info(url, download=download)
+            except Exception as ex:
+                e = ex
+                err_str = str(e).lower()
+
+        if "sign in to confirm your age" in err_str or "age-restricted" in err_str:
+            raise RuntimeError("🔞 This video is age-restricted by YouTube. Please configure a cookies.txt file (/cookies) to access age-restricted videos.") from e
+
+        if "sign in to confirm you're not a bot" in err_str:
+            raise RuntimeError("🤖 YouTube anti-bot verification active for this video. Please set up a cookies.txt file (/cookies) to bypass YouTube verification.") from e
+
+        raise e
 
 
 def list_formats_sync(url: str) -> List[Dict[str, Any]]:
@@ -133,8 +179,7 @@ def list_formats_sync(url: str) -> List[Dict[str, Any]]:
         "noplaylist": True,
         **_cookie_opts(),
     }
-    with yt_dlp.YoutubeDL(opts) as ydl:
-        info = ydl.extract_info(url, download=False)
+    info = _safe_extract_info(opts, url, download=False)
     if not info:
         return []
     formats = info.get("formats") or []
@@ -187,18 +232,19 @@ def _download_sync(
     progress_callback: Optional[Callable[[dict], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
-    ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist)
+    ydl_opts = _build_ydl_opts(out_dir, format_str, progress_callback, cancel_check, playlist, browser_override=browser_override)
+    info = _safe_extract_info(ydl_opts, url, download=True)
+    if info is None:
+        raise RuntimeError("yt-dlp returned no info")
+    # playlist → first entry for simplicity of single-send path
+    if "entries" in info:
+        entries = [e for e in (info.get("entries") or []) if e]
+        if not entries:
+            raise RuntimeError("Empty playlist")
+        info = entries[0]
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        info = ydl.extract_info(url, download=True)
-        if info is None:
-            raise RuntimeError("yt-dlp returned no info")
-        # playlist → first entry for simplicity of single-send path
-        if "entries" in info:
-            entries = [e for e in (info.get("entries") or []) if e]
-            if not entries:
-                raise RuntimeError("Empty playlist")
-            info = entries[0]
         filename = ydl.prepare_filename(info)
         if not os.path.exists(filename):
             base, _ = os.path.splitext(filename)
@@ -353,7 +399,10 @@ SEARCH_BACKENDS = {
     "youtube": ("ytsearch{n}:{q}", "YouTube"),
     "soundcloud": ("scsearch{n}:{q}", "SoundCloud"),
     "bilibili": ("ytsearch{n}:bilibili {q}", "Bilibili"),
-    "universal": ("ytsearch{n}:{q}", "Universal Web"),
+    "reddit": ("ytsearch{n}:site:reddit.com {q}", "Reddit"),
+    "instagram": ("ytsearch{n}:site:instagram.com {q}", "Instagram"),
+    "x": ("ytsearch{n}:site:x.com {q}", "X/Twitter"),
+    "spotify": ("ytsearch{n}:{q}", "Spotify"),
 }
 
 
@@ -379,8 +428,7 @@ def web_search_sync(query: str, limit: int = 10, source: str = "all") -> List[Di
         tmpl, label = SEARCH_BACKENDS[key]
         search_url = tmpl.format(n=per, q=q)
         try:
-            with yt_dlp.YoutubeDL(opts) as ydl:
-                info = ydl.extract_info(search_url, download=False)
+            info = _safe_extract_info(opts, search_url, download=False)
             for e in (info or {}).get("entries") or []:
                 if not e:
                     continue
@@ -422,8 +470,7 @@ async def extract_info(url: str, playlist: bool = False) -> Dict[str, Any]:
     def _info():
         opts = _build_ydl_opts("/tmp", playlist=playlist, extra={"skip_download": True})
         opts.pop("progress_hooks", None)
-        with yt_dlp.YoutubeDL(opts) as ydl:
-            return ydl.extract_info(url, download=False)
+        return _safe_extract_info(opts, url, download=False)
     loop = asyncio.get_running_loop()
     return await loop.run_in_executor(_executor, _info)
 
@@ -435,6 +482,7 @@ async def download(
     progress_callback: Optional[Callable[[dict], None]] = None,
     cancel_check: Optional[Callable[[], bool]] = None,
     playlist: bool = False,
+    browser_override: str | None = None,
 ) -> Dict[str, Any]:
     if not is_supported_url(url):
         raise ValueError("URL not supported or yt-dlp disabled")
@@ -444,7 +492,7 @@ async def download(
     loop = asyncio.get_running_loop()
     result = await loop.run_in_executor(
         _executor,
-        lambda: _download_sync(url, out_dir, fmt, progress_callback, cancel_check, playlist),
+        lambda: _download_sync(url, out_dir, fmt, progress_callback, cancel_check, playlist, browser_override),
     )
     path = result.get("filepath")
     if not path or not os.path.exists(path):

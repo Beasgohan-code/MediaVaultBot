@@ -1,9 +1,7 @@
 #@mediavault
 """
-Media Tools Plugin — Trim & Convert audio/video using ffmpeg
-Usage:
-  Reply to a media message with `/trim 00:00:10 00:00:30`
-  Reply to a media message with `/convert mp3` or `/convert mp4`
+Media Tools Plugin — Trim, Convert, Compress, Split & Tag audio/video using FFmpeg with
+concurrency limits, file size guards, execution timeouts, and quota enforcement.
 """
 from __future__ import annotations
 
@@ -29,14 +27,46 @@ logger = logging.getLogger(__name__)
 TMP_TOOLS_DIR = Path("/tmp/mediavault_tools")
 TMP_TOOLS_DIR.mkdir(parents=True, exist_ok=True)
 
+# Global Semaphore: max 2 concurrent FFmpeg operations to avoid CPU overload
+FFMPEG_SEMAPHORE = asyncio.Semaphore(2)
+CONVERT_ALLOWLIST = {"mp3", "mp4", "m4a", "flac", "wav", "ogg", "opus", "mkv", "webm", "mov"}
+
 
 def _escape(t: str) -> str:
     return html.escape(t or "")
 
 
+def _check_ffmpeg_installed() -> bool:
+    return shutil.which(FFMPEG_PATH) is not None
+
+
+async def _extract_video_frame(in_filepath: Path, work_dir: Path) -> str | None:
+    thumb_path = work_dir / "auto_frame_thumb.jpg"
+    try:
+        cmd = [
+            FFMPEG_PATH, "-y",
+            "-ss", "00:00:03",
+            "-i", str(in_filepath),
+            "-vframes", "1",
+            "-q:v", "2",
+            str(thumb_path),
+        ]
+        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+        await asyncio.wait_for(proc.communicate(), timeout=30)
+        if thumb_path.exists() and os.path.getsize(thumb_path) > 0:
+            return str(thumb_path)
+    except Exception:
+        pass
+    return None
+
+
 @Client.on_message(filters.private & filters.command("trim"))
 @check_ban
 async def trim_cmd(client: Client, message: Message):
+    if not _check_ffmpeg_installed():
+        await message.reply_text("<blockquote>❌ FFmpeg is not installed on the server. Media tools are offline.</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
     user = message.from_user
     if not user:
         return
@@ -70,15 +100,17 @@ async def trim_cmd(client: Client, message: Message):
 
     if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
         await message.reply_text(
-            f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>",
+            f"<blockquote>❌ File too large ({format_size(file_size)}). Max allowed is {MAX_FILE_SIZE_MB}MB.</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
 
-    status = await message.reply_text(
-        f"<blockquote>⏳ <b>Downloading media for trimming…</b></blockquote>",
-        parse_mode=ParseMode.HTML,
-    )
+    allowed, qmsg = await db.check_quota(user.id)
+    if not allowed:
+        await message.reply_text(f"<blockquote>🚫 Quota: {_escape(qmsg)}</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
+    status = await message.reply_text("<blockquote>⏳ <b>Downloading media for trimming…</b></blockquote>", parse_mode=ParseMode.HTML)
 
     work_dir = TMP_TOOLS_DIR / str(user.id) / str(int(time.time()))
     work_dir.mkdir(parents=True, exist_ok=True)
@@ -90,51 +122,66 @@ async def trim_cmd(client: Client, message: Message):
         if not downloaded or not os.path.exists(downloaded):
             raise RuntimeError("Download failed")
 
-        await status.edit_text("<blockquote>✂️ <b>Trimming media with ffmpeg…</b></blockquote>", parse_mode=ParseMode.HTML)
+        await status.edit_text("<blockquote>✂️ <b>Trimming media with FFmpeg…</b></blockquote>", parse_mode=ParseMode.HTML)
 
-        cmd = [
-            FFMPEG_PATH, "-y",
-            "-ss", start_time,
-            "-to", end_time,
-            "-i", str(in_filepath),
-            "-c", "copy",
-            str(out_filepath),
-        ]
-
-        proc = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-        )
-        _, stderr = await proc.communicate()
-
-        if proc.returncode != 0 or not out_filepath.exists():
-            # Fallback without -c copy (re-encode)
-            cmd_reencode = [
+        async with FFMPEG_SEMAPHORE:
+            cmd = [
                 FFMPEG_PATH, "-y",
                 "-ss", start_time,
                 "-to", end_time,
                 "-i", str(in_filepath),
+                "-c", "copy",
                 str(out_filepath),
             ]
-            proc2 = await asyncio.create_subprocess_exec(
-                *cmd_reencode, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-            )
-            _, stderr2 = await proc2.communicate()
-            if proc2.returncode != 0 or not out_filepath.exists():
-                raise RuntimeError(f"FFmpeg trim error: {stderr2.decode()[:150]}")
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            try:
+                await asyncio.wait_for(proc.communicate(), timeout=300)
+            except asyncio.TimeoutError:
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                raise RuntimeError("FFmpeg trim timed out after 5 minutes")
+
+            if proc.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
+                cmd_reencode = [
+                    FFMPEG_PATH, "-y",
+                    "-ss", start_time,
+                    "-to", end_time,
+                    "-i", str(in_filepath),
+                    str(out_filepath),
+                ]
+                proc2 = await asyncio.create_subprocess_exec(*cmd_reencode, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+                try:
+                    await asyncio.wait_for(proc2.communicate(), timeout=300)
+                except asyncio.TimeoutError:
+                    try:
+                        proc2.kill()
+                    except Exception:
+                        pass
+                    raise RuntimeError("FFmpeg re-encode timed out after 5 minutes")
+                if proc2.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
+                    raise RuntimeError("FFmpeg trim failed")
+
+        out_size = os.path.getsize(out_filepath)
+        await db.log_download(user.id, f"trim:{orig_file_name}", orig_file_name, out_size)
 
         await status.edit_text("<blockquote>📤 <b>Uploading trimmed media…</b></blockquote>", parse_mode=ParseMode.HTML)
 
         caption = (
             f"<blockquote>✂️ <b>Trimmed Media</b>\n"
             f"⏱ {start_time} ➔ {end_time}\n"
-            f"📦 Size: {format_size(os.path.getsize(out_filepath))}</blockquote>"
+            f"📦 Size: {format_size(out_size)}</blockquote>"
         )
 
         ext = out_filepath.suffix.lower()
+        from telegram.plugins.thumbnails import get_user_thumb
+        thumb = get_user_thumb(user.id) or (await _extract_video_frame(out_filepath, work_dir) if ext in (".mp4", ".mkv", ".webm", ".mov") else None)
+
         if ext in (".mp4", ".mkv", ".webm", ".mov"):
-            await client.send_video(message.chat.id, str(out_filepath), caption=caption, parse_mode=ParseMode.HTML)
+            await client.send_video(message.chat.id, str(out_filepath), caption=caption, thumb=thumb, supports_streaming=True, parse_mode=ParseMode.HTML)
         else:
-            await client.send_audio(message.chat.id, str(out_filepath), caption=caption, parse_mode=ParseMode.HTML)
+            await client.send_audio(message.chat.id, str(out_filepath), caption=caption, thumb=thumb, parse_mode=ParseMode.HTML)
 
         await status.delete()
 
@@ -151,6 +198,10 @@ async def trim_cmd(client: Client, message: Message):
 @Client.on_message(filters.private & filters.command("compress"))
 @check_ban
 async def compress_cmd(client: Client, message: Message):
+    if not _check_ffmpeg_installed():
+        await message.reply_text("<blockquote>❌ FFmpeg is not installed on the server. Media tools are offline.</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
     user = message.from_user
     if not user:
         return
@@ -160,10 +211,19 @@ async def compress_cmd(client: Client, message: Message):
     if not reply or not (reply.video or reply.document):
         await message.reply_text(
             "<blockquote>⚡ <b>Video Compressor</b>\n\n"
-            "Reply to a video with <code>/compress</code> to reduce file size!</blockquote>",
+            "Reply to a video with <code>/compress</code> or <code>/compress heavy</code> / <code>/compress light</code> to reduce file size!</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
+
+    crf = "28"
+    parts = (message.text or "").split()
+    if len(parts) > 1:
+        mode = parts[1].lower()
+        if mode == "light":
+            crf = "23"
+        elif mode == "heavy":
+            crf = "32"
 
     media_obj = reply.video or reply.document
     orig_file_name = getattr(media_obj, "file_name", None) or "video.mp4"
@@ -171,6 +231,11 @@ async def compress_cmd(client: Client, message: Message):
 
     if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
         await message.reply_text(f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
+    allowed, qmsg = await db.check_quota(user.id)
+    if not allowed:
+        await message.reply_text(f"<blockquote>🚫 Quota: {_escape(qmsg)}</blockquote>", parse_mode=ParseMode.HTML)
         return
 
     status = await message.reply_text("<blockquote>⏳ <b>Downloading video for compression…</b></blockquote>", parse_mode=ParseMode.HTML)
@@ -185,26 +250,31 @@ async def compress_cmd(client: Client, message: Message):
         if not downloaded or not os.path.exists(downloaded):
             raise RuntimeError("Download failed")
 
-        await status.edit_text("<blockquote>⚡ <b>Compressing video with FFmpeg (H.264 / CRF 28)…</b></blockquote>", parse_mode=ParseMode.HTML)
+        await status.edit_text(f"<blockquote>⚡ <b>Compressing video with FFmpeg (CRF {crf})…</b></blockquote>", parse_mode=ParseMode.HTML)
 
-        cmd = [
-            FFMPEG_PATH, "-y",
-            "-i", str(in_filepath),
-            "-vcodec", "libx264",
-            "-crf", "28",
-            "-preset", "faster",
-            "-acodec", "aac",
-            str(out_filepath),
-        ]
+        async with FFMPEG_SEMAPHORE:
+            cmd = [
+                FFMPEG_PATH, "-y",
+                "-i", str(in_filepath),
+                "-vcodec", "libx264",
+                "-crf", crf,
+                "-preset", "faster",
+                "-acodec", "aac",
+                str(out_filepath),
+            ]
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            await asyncio.wait_for(proc.communicate(), timeout=300)
 
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        _, stderr = await proc.communicate()
-
-        if proc.returncode != 0 or not out_filepath.exists():
-            raise RuntimeError(f"FFmpeg compress error: {stderr.decode()[:150]}")
+        if proc.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
+            raise RuntimeError("FFmpeg compression failed")
 
         new_size = os.path.getsize(out_filepath)
+        if new_size >= file_size:
+            await status.edit_text("<blockquote>⚠️ Compression did not reduce file size. Original kept.</blockquote>", parse_mode=ParseMode.HTML)
+            return
+
         reduction = (1 - (new_size / file_size)) * 100 if file_size else 0
+        await db.log_download(user.id, f"compress:{orig_file_name}", orig_file_name, new_size)
 
         await status.edit_text("<blockquote>📤 <b>Uploading compressed video…</b></blockquote>", parse_mode=ParseMode.HTML)
 
@@ -215,7 +285,7 @@ async def compress_cmd(client: Client, message: Message):
         )
 
         from telegram.plugins.thumbnails import get_user_thumb
-        thumb = get_user_thumb(user.id)
+        thumb = get_user_thumb(user.id) or await _extract_video_frame(out_filepath, work_dir)
 
         await client.send_video(
             message.chat.id,
@@ -241,6 +311,10 @@ async def compress_cmd(client: Client, message: Message):
 @Client.on_message(filters.private & filters.command("split"))
 @check_ban
 async def split_cmd(client: Client, message: Message):
+    if not _check_ffmpeg_installed():
+        await message.reply_text("<blockquote>❌ FFmpeg is not installed on the server. Media tools are offline.</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
     user = message.from_user
     if not user:
         return
@@ -250,7 +324,7 @@ async def split_cmd(client: Client, message: Message):
     if not reply or not (reply.video or reply.document):
         await message.reply_text(
             "<blockquote>✂️ <b>Video Splitter</b>\n\n"
-            "Reply to a video with <code>/split</code> or <code>/split 10m</code> (segment duration). Default is 10m chunks!</blockquote>",
+            "Reply to a video with <code>/split</code> or <code>/split 10m</code> (max 120m segment duration).</blockquote>",
             parse_mode=ParseMode.HTML,
         )
         return
@@ -260,7 +334,7 @@ async def split_cmd(client: Client, message: Message):
     if len(parts) > 1:
         val = parts[1].lower().rstrip("ms")
         if val.isdigit():
-            seg_sec = int(val) * 60
+            seg_sec = min(7200, max(60, int(val) * 60))  # capped at 120m max
 
     media_obj = reply.video or reply.document
     orig_file_name = getattr(media_obj, "file_name", None) or "video.mp4"
@@ -268,6 +342,11 @@ async def split_cmd(client: Client, message: Message):
 
     if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
         await message.reply_text(f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
+    allowed, qmsg = await db.check_quota(user.id)
+    if not allowed:
+        await message.reply_text(f"<blockquote>🚫 Quota: {_escape(qmsg)}</blockquote>", parse_mode=ParseMode.HTML)
         return
 
     status = await message.reply_text("<blockquote>⏳ <b>Downloading video for splitting…</b></blockquote>", parse_mode=ParseMode.HTML)
@@ -284,23 +363,23 @@ async def split_cmd(client: Client, message: Message):
         await status.edit_text(f"<blockquote>✂️ <b>Splitting video into {seg_sec // 60}m segments…</b></blockquote>", parse_mode=ParseMode.HTML)
 
         out_pattern = str(work_dir / f"part_%03d_{orig_file_name}")
-        cmd = [
-            FFMPEG_PATH, "-y",
-            "-i", str(in_filepath),
-            "-c", "copy",
-            "-map", "0",
-            "-segment_time", str(seg_sec),
-            "-f", "segment",
-            "-reset_timestamps", "1",
-            out_pattern,
-        ]
-
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        _, stderr = await proc.communicate()
+        async with FFMPEG_SEMAPHORE:
+            cmd = [
+                FFMPEG_PATH, "-y",
+                "-i", str(in_filepath),
+                "-c", "copy",
+                "-map", "0",
+                "-segment_time", str(seg_sec),
+                "-f", "segment",
+                "-reset_timestamps", "1",
+                out_pattern,
+            ]
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            await asyncio.wait_for(proc.communicate(), timeout=300)
 
         split_files = sorted(list(work_dir.glob(f"part_*_{orig_file_name}")))
         if proc.returncode != 0 or not split_files:
-            raise RuntimeError(f"FFmpeg split error: {stderr.decode()[:150]}")
+            raise RuntimeError("FFmpeg split failed")
 
         await status.edit_text(f"<blockquote>📤 <b>Uploading {len(split_files)} split video parts…</b></blockquote>", parse_mode=ParseMode.HTML)
 
@@ -308,7 +387,9 @@ async def split_cmd(client: Client, message: Message):
         thumb = get_user_thumb(user.id)
 
         for idx, sf in enumerate(split_files, 1):
-            caption = f"<blockquote>✂️ <b>Part {idx}/{len(split_files)}</b>\n📦 Size: {format_size(os.path.getsize(sf))}</blockquote>"
+            sf_size = os.path.getsize(sf)
+            await db.log_download(user.id, f"split:{sf.name}", sf.name, sf_size)
+            caption = f"<blockquote>✂️ <b>Part {idx}/{len(split_files)}</b>\n📦 Size: {format_size(sf_size)}</blockquote>"
             await client.send_video(
                 message.chat.id,
                 str(sf),
@@ -371,6 +452,11 @@ async def tag_cmd(client: Client, message: Message):
         await message.reply_text(f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>", parse_mode=ParseMode.HTML)
         return
 
+    allowed, qmsg = await db.check_quota(user.id)
+    if not allowed:
+        await message.reply_text(f"<blockquote>🚫 Quota: {_escape(qmsg)}</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
     status = await message.reply_text("<blockquote>⏳ <b>Downloading audio for tagging…</b></blockquote>", parse_mode=ParseMode.HTML)
 
     work_dir = TMP_TOOLS_DIR / str(user.id) / str(int(time.time()))
@@ -397,6 +483,9 @@ async def tag_cmd(client: Client, message: Message):
                 audio_file.save()
         except Exception as ex:
             logger.warning("mutagen tag edit error: %s", ex)
+
+        out_size = os.path.getsize(in_filepath)
+        await db.log_download(user.id, f"tag:{orig_file_name}", orig_file_name, out_size)
 
         await status.edit_text("<blockquote>📤 <b>Uploading tagged audio file…</b></blockquote>", parse_mode=ParseMode.HTML)
 
@@ -435,6 +524,10 @@ async def tag_cmd(client: Client, message: Message):
 @Client.on_message(filters.private & filters.command("convert"))
 @check_ban
 async def convert_cmd(client: Client, message: Message):
+    if not _check_ffmpeg_installed():
+        await message.reply_text("<blockquote>❌ FFmpeg is not installed on the server. Media tools are offline.</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
     user = message.from_user
     if not user:
         return
@@ -460,16 +553,25 @@ async def convert_cmd(client: Client, message: Message):
         return
 
     target_fmt = parts[1].strip().lower().lstrip(".")
+    if target_fmt not in CONVERT_ALLOWLIST:
+        await message.reply_text(
+            f"<blockquote>❌ Unsupported format <code>{_escape(target_fmt)}</code>.\n"
+            f"Allowed: <code>{', '.join(sorted(CONVERT_ALLOWLIST))}</code></blockquote>",
+            parse_mode=ParseMode.HTML,
+        )
+        return
 
     media_obj = reply.video or reply.audio or reply.document or reply.voice
     orig_file_name = getattr(media_obj, "file_name", None) or "media"
     file_size = getattr(media_obj, "file_size", 0)
 
     if file_size > MAX_FILE_SIZE_MB * 1024 * 1024:
-        await message.reply_text(
-            f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>",
-            parse_mode=ParseMode.HTML,
-        )
+        await message.reply_text(f"<blockquote>❌ File too large ({format_size(file_size)})</blockquote>", parse_mode=ParseMode.HTML)
+        return
+
+    allowed, qmsg = await db.check_quota(user.id)
+    if not allowed:
+        await message.reply_text(f"<blockquote>🚫 Quota: {_escape(qmsg)}</blockquote>", parse_mode=ParseMode.HTML)
         return
 
     status = await message.reply_text("<blockquote>⏳ <b>Downloading media for conversion…</b></blockquote>", parse_mode=ParseMode.HTML)
@@ -485,27 +587,34 @@ async def convert_cmd(client: Client, message: Message):
         if not downloaded or not os.path.exists(downloaded):
             raise RuntimeError("Download failed")
 
-        await status.edit_text(f"<blockquote>🔄 <b>Converting to .{target_fmt} with ffmpeg…</b></blockquote>", parse_mode=ParseMode.HTML)
+        await status.edit_text(f"<blockquote>🔄 <b>Converting to .{target_fmt} with FFmpeg…</b></blockquote>", parse_mode=ParseMode.HTML)
 
-        cmd = [FFMPEG_PATH, "-y", "-i", str(in_filepath), str(out_filepath)]
-        proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
-        _, stderr = await proc.communicate()
+        async with FFMPEG_SEMAPHORE:
+            cmd = [FFMPEG_PATH, "-y", "-i", str(in_filepath), str(out_filepath)]
+            proc = await asyncio.create_subprocess_exec(*cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE)
+            await asyncio.wait_for(proc.communicate(), timeout=300)
 
-        if proc.returncode != 0 or not out_filepath.exists():
-            raise RuntimeError(f"FFmpeg conversion error: {stderr.decode()[:150]}")
+        if proc.returncode != 0 or not out_filepath.exists() or os.path.getsize(out_filepath) == 0:
+            raise RuntimeError("FFmpeg conversion failed")
+
+        out_size = os.path.getsize(out_filepath)
+        await db.log_download(user.id, f"convert:{orig_file_name}", orig_file_name, out_size)
 
         await status.edit_text("<blockquote>📤 <b>Uploading converted file…</b></blockquote>", parse_mode=ParseMode.HTML)
 
         caption = (
             f"<blockquote>🔄 <b>Converted Media</b>\n"
             f"📄 Format: <code>.{target_fmt}</code>\n"
-            f"📦 Size: {format_size(os.path.getsize(out_filepath))}</blockquote>"
+            f"📦 Size: {format_size(out_size)}</blockquote>"
         )
 
+        from telegram.plugins.thumbnails import get_user_thumb
+        thumb = get_user_thumb(user.id) or (await _extract_video_frame(out_filepath, work_dir) if target_fmt in ("mp4", "mkv", "webm", "mov") else None)
+
         if target_fmt in ("mp3", "m4a", "flac", "wav", "ogg", "opus"):
-            await client.send_audio(message.chat.id, str(out_filepath), caption=caption, parse_mode=ParseMode.HTML)
+            await client.send_audio(message.chat.id, str(out_filepath), caption=caption, thumb=thumb, parse_mode=ParseMode.HTML)
         elif target_fmt in ("mp4", "mkv", "webm", "mov"):
-            await client.send_video(message.chat.id, str(out_filepath), caption=caption, parse_mode=ParseMode.HTML)
+            await client.send_video(message.chat.id, str(out_filepath), caption=caption, thumb=thumb, supports_streaming=True, parse_mode=ParseMode.HTML)
         else:
             await client.send_document(message.chat.id, str(out_filepath), caption=caption, parse_mode=ParseMode.HTML)
 

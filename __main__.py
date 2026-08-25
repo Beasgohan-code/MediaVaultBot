@@ -34,18 +34,6 @@ logging.getLogger("googleapiclient").setLevel(logging.WARNING)
 logging.getLogger("yt_dlp").setLevel(logging.WARNING)
 logger = logging.getLogger("mediavault")
 
-def _patch_upload_timeout():
-    try:
-        import pyrogram.session.session as sess
-        _orig = sess.Session.__init__
-        def _init(self, *a, **kw):
-            _orig(self, *a, **kw)
-            self.WAIT_TIMEOUT = 60
-            self.SLEEP_THRESHOLD = 30
-        sess.Session.__init__ = _init
-        logger.info("Upload timeout patched (60s)")
-    except Exception as e:
-        logger.debug("timeout patch skip: %s", e)
 
 
 
@@ -212,7 +200,6 @@ def create_app() -> Client:
 
 async def main():
     logger.info("Starting MediaVaultBot…")
-    _patch_upload_timeout()
     # Health first — Railway probes PORT immediately
     await start_health_server()
     asyncio.create_task(temp_cleanup_loop())

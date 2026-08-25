@@ -14,13 +14,6 @@ def format_size(num: Optional[int]) -> str:
     return humanize.naturalsize(num, binary=True)
 
 
-def progress_bar(current: int, total: int, length: int = 12) -> str:
-    if total <= 0:
-        return "░" * length
-    filled = int(length * current / total)
-    return "█" * filled + "░" * (length - filled)
-
-
 def format_speed(bytes_per_sec: float) -> str:
     return humanize.naturalsize(bytes_per_sec, binary=True) + "/s"
 
@@ -30,6 +23,16 @@ def eta(current: int, total: int, speed: float) -> str:
         return "—"
     remaining = (total - current) / speed
     return humanize.naturaldelta(remaining)
+
+
+def progress_bar(current_or_pct: float | int, total: float | int | None = None, length: int = 10) -> str:
+    if total is not None and float(total) > 0:
+        percent = (float(current_or_pct) / float(total)) * 100.0
+    else:
+        percent = float(current_or_pct or 0.0)
+    percent = max(0.0, min(100.0, percent))
+    filled = int((percent / 100.0) * length)
+    return "▓" * filled + "░" * (length - filled)
 
 
 class ProgressTracker:
@@ -68,12 +71,6 @@ class ProgressTracker:
             total=format_size(self.total),
             eta=eta(self.current, self.total, self.speed),
         )
-
-
-def progress_bar(percent: float, length: int = 10) -> str:
-    percent = max(0.0, min(100.0, float(percent or 0)))
-    filled = int((percent / 100) * length)
-    return "▓" * filled + "░" * (length - filled)
 
 
 def human_duration(seconds) -> str:
