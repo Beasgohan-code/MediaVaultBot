@@ -121,6 +121,11 @@ def _build_ydl_opts(
         "age_limit": YTDLP_AGE_LIMIT if YTDLP_AGE_LIMIT > 0 else None,
         "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
         "js_runtimes": {"node": {}},
+        "extractor_args": {
+            "youtube": {
+                "player_client": ["ios", "mweb", "android", "web"]
+            }
+        },
         "http_headers": {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -161,11 +166,33 @@ def _safe_extract_info(opts: Dict[str, Any], url: str, download: bool = False) -
                 e = ex
                 err_str = str(e).lower()
 
+        # If YouTube asks for bot verification / sign-in, attempt fallback player_client strategies
+        if "sign in to confirm" in err_str or "not a bot" in err_str or "confirm you're not a bot" in err_str:
+            client_fallback_sets = [
+                ["ios", "mweb"],
+                ["android", "ios"],
+                ["tv_embedded"],
+                ["mweb"],
+            ]
+            for client_set in client_fallback_sets:
+                try:
+                    logger.warning("Bot verification triggered. Retrying with player_client=%s...", client_set)
+                    fallback_opts = copy.deepcopy(retry_opts)
+                    if "extractor_args" not in fallback_opts:
+                        fallback_opts["extractor_args"] = {}
+                    fallback_opts["extractor_args"]["youtube"] = {"player_client": client_set}
+                    with yt_dlp.YoutubeDL(fallback_opts) as ydl:
+                        return ydl.extract_info(url, download=download)
+                except Exception as ex:
+                    logger.debug("Fallback player_client %s failed: %s", client_set, ex)
+                    e = ex
+                    err_str = str(e).lower()
+
         if "sign in to confirm your age" in err_str or "age-restricted" in err_str:
-            raise RuntimeError("🔞 This video is age-restricted by YouTube. Please configure a cookies.txt file (/cookies) to access age-restricted videos.") from e
+            raise RuntimeError("🔞 This video is age-restricted by YouTube. Please upload or configure a cookies.txt file (/cookies) to access age-restricted videos.") from e
 
         if "sign in to confirm you're not a bot" in err_str:
-            raise RuntimeError("🤖 YouTube anti-bot verification active for this video. Please set up a cookies.txt file (/cookies) to bypass YouTube verification.") from e
+            raise RuntimeError("🤖 YouTube anti-bot verification active for this video. Please upload a cookies.txt file via /cookies or set your browser via /setbrowser.") from e
 
         raise e
 
