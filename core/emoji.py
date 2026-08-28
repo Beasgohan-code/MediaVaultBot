@@ -110,3 +110,7 @@ def star() -> str:
 
 def crown() -> str:
     return ce("crown", "👑")
+
+
+def fire() -> str:
+    return ce("fire", "🔥")
